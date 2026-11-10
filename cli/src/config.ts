@@ -3,6 +3,7 @@ import { createPublicClient, http, getAddress, type Address, type PublicClient }
 import { sepolia } from "viem/chains";
 import { BNB, ETHEREUM, BNB_TESTNET, createClient, type NetworkConfig } from "@altananetwork/sdk";
 import table from "../../networks.json" with { type: "json" };
+import { installRelayCompat } from "./relaycompat.ts";
 
 export type Mode = "testnet" | "mainnet";
 export type NetworkKey = "bnb" | "ethereum";
@@ -38,6 +39,8 @@ export type Chain = {
   assets: Asset[];
   preset: { nativeCap: string; feeHeadroom: string; caps: Record<string, string> };
   sdkConfig: string | null;
+  /** A caveat about this network's relay, shown with relay failures. */
+  relayNote: string | null;
 };
 
 const SDK_CONFIGS: Record<string, NetworkConfig> = { BNB, ETHEREUM, BNB_TESTNET };
@@ -74,6 +77,7 @@ function parseChain(id: string, raw: any): Chain {
     assets,
     preset: raw.preset,
     sdkConfig: raw.sdkConfig,
+    relayNote: typeof raw.relayNote === "string" ? raw.relayNote : null,
   };
 }
 
@@ -121,7 +125,9 @@ export function sdkNetwork(chain: Chain): NetworkConfig {
 }
 
 export function altanaClient(chains: Chain[]) {
-  return createClient({ chains: chains.map(sdkNetwork) });
+  const networks = chains.map(sdkNetwork);
+  installRelayCompat(networks.map((n) => n.relayUrl));
+  return createClient({ chains: networks });
 }
 
 const rpcCache = new Map<number, PublicClient>();

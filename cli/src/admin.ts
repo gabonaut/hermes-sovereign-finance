@@ -6,7 +6,7 @@ import { serializeSession, signerFromPasskey, signerFromPrivateKey } from "@alta
 import { erc20Abi } from "./abi.ts";
 import { altanaClient, chainFor, chainsFor, findAsset, isNetworkKey, keystoreKeyUrl, rpc, txUrl, type Chain, type Mode, type NetworkKey } from "./config.ts";
 import { balances, keystoreKeys, nativeBalance, registrationFee, relayGasBuffer, relayServes } from "./chainread.ts";
-import { CliError, decodeFailure } from "./errors.ts";
+import { CliError, decodeFailure, relayDropped } from "./errors.ts";
 import type { JobReporter } from "./job.ts";
 import { compilePolicy, type GrantInput } from "./policy.ts";
 import type { SessionRecord, Store, WalletRecord } from "./store.ts";
@@ -241,7 +241,7 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
       } catch (e) {
         const f = decodeFailure(e);
         ctx.log(`activate ${chain.name} failed: ${f.raw}`);
-        leg.error = f.message;
+        leg.error = f.code === "RELAY_REJECTED" ? relayDropped(chain.relayNote) : f.message;
       }
     }
     return out;
