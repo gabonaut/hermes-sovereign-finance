@@ -1,0 +1,9 @@
+{
+  "name": "sovereign-finance",
+  "label": "Sovereign Finance",
+  "description": "Backend for the Sovereign Finance pane in Hermes Desktop.",
+  "icon": "Wallet",
+  "version": "0.1.0",
+  "tab": {"hidden": true},
+  "api": "plugin_api.py"
+}
