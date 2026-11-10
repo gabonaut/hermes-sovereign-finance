@@ -1,0 +1,24 @@
+{
+  "name": "sovereign-finance-pane",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hermes Desktop pane for the sovereign-finance plugin. Builds ../desktop/plugin.js.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check",
+    "dev": "node build.mjs --dev --serve",
+    "shots": "node dev/shoot.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "esbuild": "0.28.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "6.0.3",
+    "uqr": "0.1.3"
+  }
+}
