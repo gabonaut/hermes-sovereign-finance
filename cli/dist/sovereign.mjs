@@ -47270,6 +47270,10 @@ async function recoverWallet(ctx) {
 function estimateGrantGas(callEntries, spendEntries, firstAction) {
   return BigInt(45e4 + callEntries * 28e3 + spendEntries * 55e3 + (firstAction ? 35e4 : 0));
 }
+function ceil6(raw) {
+  const unit = 10n ** 12n;
+  return formatUnits((raw + unit - 1n) / unit * unit, 18);
+}
 async function costOf(chain, wallet, callEntries, spendEntries) {
   const client = rpc(chain);
   const [fee, keys, gasPrice, balance] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet)]);
@@ -47279,14 +47283,16 @@ async function costOf(chain, wallet, callEntries, spendEntries) {
   const total = keystoreFee + relayFee;
   return {
     cost: {
-      keystoreFee: formatUnits(keystoreFee, 18),
-      relayFeeEstimate: formatUnits(relayFee, 18),
-      total: formatUnits(total, 18),
+      keystoreFee: ceil6(keystoreFee),
+      relayFeeEstimate: ceil6(relayFee),
+      total: ceil6(total),
       nativeSymbol: chain.nativeSymbol,
       firstAction
     },
     balance: formatUnits(balance, 18),
-    sufficient: balance >= total
+    sufficient: balance >= total,
+    keystoreFeeRaw: keystoreFee,
+    balanceRaw: balance
   };
 }
 async function grantDraft(ctx, input2) {
@@ -47301,7 +47307,7 @@ async function grantDraft(ctx, input2) {
   for (const key of keys) {
     const chain = chainFor(ctx.mode, key);
     const policy = compilePolicy(chain, input2.networks[key], expiry);
-    const priced = await costOf(chain, wallet.address, policy.permissions.calls.length, policy.permissions.spend.length);
+    const { keystoreFeeRaw: _fee, balanceRaw: _balance, ...priced } = await costOf(chain, wallet.address, policy.permissions.calls.length, policy.permissions.spend.length);
     draft.networks[key] = { scopeText: policy.scopeText, ...priced };
     draft.inputs[key] = input2.networks[key];
   }
@@ -47332,7 +47338,7 @@ async function activate(ctx, input2) {
         let record2 = ctx.store.session(chain.chainId);
         if (!(record2?.status === "active" && record2.draftId === draft.id)) {
           const priced = await costOf(chain, wallet.address, policy.permissions.calls.length, policy.permissions.spend.length);
-          if (parseUnits(priced.balance, 18) < parseUnits(priced.cost.keystoreFee, 18)) {
+          if (priced.balanceRaw < priced.keystoreFeeRaw) {
             throw new CliError("INSUFFICIENT_FUNDS", `The wallet holds ${priced.balance} ${chain.nativeSymbol} on ${chain.name}. Activation needs about ${priced.cost.total}. Send more and activate again.`);
           }
         }

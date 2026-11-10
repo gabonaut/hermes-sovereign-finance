@@ -100,6 +100,12 @@ function estimateGrantGas(callEntries: number, spendEntries: number, firstAction
   return BigInt(450_000 + callEntries * 28_000 + spendEntries * 55_000 + (firstAction ? 350_000 : 0));
 }
 
+/** A native amount for display: six decimals, rounded up so a quoted cost is never an understatement. */
+function ceil6(raw: bigint): string {
+  const unit = 10n ** 12n;
+  return formatUnits(((raw + unit - 1n) / unit) * unit, 18);
+}
+
 async function costOf(chain: Chain, wallet: Address, callEntries: number, spendEntries: number) {
   const client = rpc(chain);
   const [fee, keys, gasPrice, balance] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet)]);
@@ -109,14 +115,16 @@ async function costOf(chain: Chain, wallet: Address, callEntries: number, spendE
   const total = keystoreFee + relayFee;
   return {
     cost: {
-      keystoreFee: formatUnits(keystoreFee, 18),
-      relayFeeEstimate: formatUnits(relayFee, 18),
-      total: formatUnits(total, 18),
+      keystoreFee: ceil6(keystoreFee),
+      relayFeeEstimate: ceil6(relayFee),
+      total: ceil6(total),
       nativeSymbol: chain.nativeSymbol,
       firstAction,
     },
     balance: formatUnits(balance, 18),
     sufficient: balance >= total,
+    keystoreFeeRaw: keystoreFee,
+    balanceRaw: balance,
   };
 }
 
@@ -133,7 +141,7 @@ export async function grantDraft(ctx: Pick<AdminCtx, "store" | "mode">, input: {
   for (const key of keys) {
     const chain = chainFor(ctx.mode, key);
     const policy = compilePolicy(chain, input.networks[key]!, expiry);
-    const priced = await costOf(chain, wallet.address, policy.permissions.calls!.length, policy.permissions.spend!.length);
+    const { keystoreFeeRaw: _fee, balanceRaw: _balance, ...priced } = await costOf(chain, wallet.address, policy.permissions.calls!.length, policy.permissions.spend!.length);
     draft.networks[key] = { scopeText: policy.scopeText, ...priced };
     draft.inputs[key] = input.networks[key];
   }
@@ -170,7 +178,7 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
         // The Keystore fee is paid from the wallet, so the balance is checked before anything is signed.
         if (!(record?.status === "active" && record.draftId === draft.id)) {
           const priced = await costOf(chain, wallet.address, policy.permissions.calls!.length, policy.permissions.spend!.length);
-          if (parseUnits(priced.balance, 18) < parseUnits(priced.cost.keystoreFee, 18)) {
+          if (priced.balanceRaw < priced.keystoreFeeRaw) {
             throw new CliError("INSUFFICIENT_FUNDS", `The wallet holds ${priced.balance} ${chain.nativeSymbol} on ${chain.name}. Activation needs about ${priced.cost.total}. Send more and activate again.`);
           }
         }
