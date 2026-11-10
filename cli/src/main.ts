@@ -5,6 +5,7 @@ import { CliError, decodeFailure } from "./errors.ts";
 import { JobReporter, type JobKind } from "./job.ts";
 import { presetFor } from "./policy.ts";
 import { listPositions } from "./positions.ts";
+import { exitPlan, listPools, lpPlan, quoteSwap } from "./quote.ts";
 import { describeBatch, execute, status } from "./session.ts";
 import { Store } from "./store.ts";
 import type { WebAuthnTransport } from "./webauthn.ts";
@@ -90,6 +91,21 @@ export async function run(argv: string[], env: Env): Promise<number> {
         if (!wallet) throw new CliError("NO_WALLET", "There is no wallet yet. Create one in the Sovereign Finance pane.");
         const chain = chainFor(mode, network);
         data = { network, chainId: chain.chainId, positions: await listPositions(store, chain, wallet.address) };
+        break;
+      }
+      case "quote": {
+        if (!network) throw new CliError("BAD_ARGS", "quote needs a network.");
+        const chain = chainFor(mode, network);
+        const wallet = store.wallet(mode);
+        const record = store.session(chain.chainId);
+        const kind = input?.kind;
+        if (kind === "pools") data = await listPools(chain, record && record.status === "active" ? record.scope : null, Math.min(Math.max(Number(input?.limit ?? 10), 1), 25));
+        else if (kind === "swap") data = await quoteSwap(chain, input);
+        else if (kind === "lp-plan" || kind === "exit-plan") {
+          if (!wallet) throw new CliError("NO_WALLET", "There is no wallet yet. Create one in the Sovereign Finance pane.");
+          data = kind === "lp-plan" ? await lpPlan(chain, wallet.address, input) : await exitPlan(chain, wallet.address, input);
+        } else throw new CliError("BAD_INPUT", 'kind must be "pools", "swap", "lp-plan" or "exit-plan".');
+        data = { network, chainId: chain.chainId, kind, ...(data as object) };
         break;
       }
       case "describe":
