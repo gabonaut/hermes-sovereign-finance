@@ -52,8 +52,9 @@ export async function relayGasBuffer(chain: Chain): Promise<bigint> {
     });
     const body: any = await res.json();
     const gas = body?.result?.[`0x${chain.chainId.toString(16)}`]?.fees?.quoteConfig?.gas;
-    const sum = BigInt(Math.round(Number(gas?.intentBuffer ?? 0))) + BigInt(Math.round(Number(gas?.txBuffer ?? 0)));
-    return sum > 0n ? sum : fallback;
+    if (!gas) return fallback;
+    // Zero is a real answer: the mainnet relay adds no buffer.
+    return BigInt(Math.round(Number(gas.intentBuffer ?? 0))) + BigInt(Math.round(Number(gas.txBuffer ?? 0)));
   } catch {
     return fallback;
   }
