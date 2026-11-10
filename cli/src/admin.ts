@@ -5,7 +5,7 @@ import { generatePrivateKey } from "viem/accounts";
 import { serializeSession, signerFromPasskey, signerFromPrivateKey } from "@altananetwork/sdk";
 import { erc20Abi } from "./abi.ts";
 import { altanaClient, chainFor, chainsFor, findAsset, isNetworkKey, keystoreKeyUrl, rpc, txUrl, type Chain, type Mode, type NetworkKey } from "./config.ts";
-import { balances, keystoreKeys, nativeBalance, registrationFee, relayServes } from "./chainread.ts";
+import { balances, keystoreKeys, nativeBalance, registrationFee, relayGasBuffer, relayServes } from "./chainread.ts";
 import { CliError, decodeFailure } from "./errors.ts";
 import type { JobReporter } from "./job.ts";
 import { compilePolicy, type GrantInput } from "./policy.ts";
@@ -95,9 +95,12 @@ export async function recoverWallet(ctx: AdminCtx) {
   return { address: getAddress(address) };
 }
 
-/** Gas the grant intent is expected to use. Calibrated against testnet grants; shown as an estimate. */
+/**
+ * Gas a grant uses, fitted to grants measured on BNB testnet (1.92M gas for a first grant with
+ * 11 call entries and 4 spend entries). The relay prices its fee on this plus its own buffers.
+ */
 function estimateGrantGas(callEntries: number, spendEntries: number, firstAction: boolean): bigint {
-  return BigInt(450_000 + callEntries * 28_000 + spendEntries * 55_000 + (firstAction ? 350_000 : 0));
+  return BigInt(500_000 + callEntries * 45_000 + spendEntries * 90_000 + (firstAction ? 550_000 : 0));
 }
 
 /** A native amount for display: six decimals, rounded up so a quoted cost is never an understatement. */
@@ -108,10 +111,10 @@ function ceil6(raw: bigint): string {
 
 async function costOf(chain: Chain, wallet: Address, callEntries: number, spendEntries: number) {
   const client = rpc(chain);
-  const [fee, keys, gasPrice, balance] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet)]);
+  const [fee, keys, gasPrice, balance, buffer] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet), relayGasBuffer(chain)]);
   const firstAction = keys.length === 0;
   const keystoreFee = fee * (firstAction ? 2n : 1n);
-  const relayFee = (estimateGrantGas(callEntries, spendEntries, firstAction) * gasPrice * 13n) / 10n;
+  const relayFee = ((estimateGrantGas(callEntries, spendEntries, firstAction) + buffer) * gasPrice * 125n) / 100n;
   const total = keystoreFee + relayFee;
   return {
     cost: {

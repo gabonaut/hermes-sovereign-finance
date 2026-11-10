@@ -122,7 +122,8 @@ export async function listPools(chain: Chain, scope: ScopeRecord | null, limit =
         currentTick: state.tick,
         volume24hUsd: Math.round(volume),
         tvlUsd: Math.round(tvl),
-        feeAprPct: tvl > 0 ? Number((((volume * fee) / 1e6 / tvl) * 365 * 100).toFixed(1)) : null,
+        feeAprPct: tvl > 0 ? Number((((volume * fee) / 1e6 / tvl) * 365 * 100 * (1 - state.protocolShare)).toFixed(1)) : null,
+        protocolFeePct: Number((state.protocolShare * 100).toFixed(1)),
         supported: Boolean(a && b),
         inScope: inScope(a, b),
       };
@@ -135,7 +136,7 @@ export async function listPools(chain: Chain, scope: ScopeRecord | null, limit =
       return row;
     }),
   );
-  return { source: "DexScreener 24 h volume and liquidity; fee tier and tick read onchain. Fee APR = volume x fee / TVL x 365.", pools };
+  return { source: "DexScreener 24 h volume and liquidity; fee tier, protocol fee share and tick read onchain. Fee APR = volume x fee x (1 - protocol share) / TVL x 365, for liquidity spread like the pool's average. A narrow range that stays in range earns more.", pools };
 }
 
 // ---- LP plans ---------------------------------------------------------------
@@ -248,12 +249,17 @@ export async function lpPlan(chain: Chain, wallet: Address, input: any) {
   let sqrtForMint = state.sqrtPriceX96;
   let swap: Action | null = null;
   let impactPct = 0;
-  for (let round = 0; round < 3; round++) {
+  // The price the split is computed at. It starts at the pool price and, when the swap goes
+  // through the LP pool, moves to the price that swap leaves behind until the two agree.
+  let sqrtRef = state.sqrtPriceX96;
+  let previousIn = 0n;
+  for (let round = 0; round < 4; round++) {
     h0 = start0;
     h1 = start1;
     swap = null;
-    const price192 = sqrtForMint * sqrtForMint; // token1 per token0, scaled by 2^192
-    const [r0, r1] = amountsForLiquidity(sqrtForMint, lo, hi, 10n ** 30n);
+    if (!explicit && round > 0) centreOn(tickOfSqrt(sqrtRef));
+    const price192 = sqrtRef * sqrtRef; // token1 per token0, scaled by 2^192
+    const [r0, r1] = amountsForLiquidity(sqrtRef, lo, hi, 10n ** 30n);
     const valueIn1 = (h0 * price192) / Q192 + h1;
     const denom = (r0 * price192) / Q192 + r1;
     if (denom === 0n || valueIn1 === 0n) throw new CliError("BAD_INPUT", "The budget is too small for this pool.");
@@ -287,11 +293,11 @@ export async function lpPlan(chain: Chain, wallet: Address, input: any) {
       sqrtForMint = state.sqrtPriceX96;
       break; // the LP pool's price is untouched
     }
-    const after = tickOfSqrt(best.sqrtAfter);
-    const stillInside = lo <= after && after < hi;
     sqrtForMint = best.sqrtAfter;
-    if (stillInside || explicit) break;
-    centreOn(after); // the swap pushed the price out of the range: follow it and split again
+    const change = amountIn > previousIn ? amountIn - previousIn : previousIn - amountIn;
+    if (round > 0 && change * 100n <= amountIn) break; // the split has settled
+    previousIn = amountIn;
+    sqrtRef = best.sqrtAfter;
   }
   if (swap) actions.push(swap);
   if (impactPct > 2) notes.push(`This pool is thin: the entry swap trades about ${impactPct.toFixed(1)}% away from the pool price. A smaller budget loses less.`);

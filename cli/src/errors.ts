@@ -91,7 +91,10 @@ export function decodeFailure(e: unknown): DecodedFailure {
   const relayCode = relay ? Number(relay[1]) : null;
   let code = "FAILED";
   let message = parts[0] ?? String(e);
-  if (revert) {
+  if (/key hash 0x[0-9a-f]+ is unknown/i.test(raw)) {
+    code = "WALLET_KEY_UNKNOWN";
+    message = "The wallet does not accept this session key. It was revoked, or the session was never activated on this network.";
+  } else if (revert) {
     code = `WALLET_${revert.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()}`;
     message = EXPLAIN[revert] ?? `The wallet refused this batch (${revert}).`;
   } else if (relayCode === 300) {

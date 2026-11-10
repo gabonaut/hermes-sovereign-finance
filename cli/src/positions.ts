@@ -17,7 +17,17 @@ export async function poolState(chain: Chain, pool: Address) {
     client.readContract({ address: pool, abi, functionName: "slot0" }) as Promise<readonly [bigint, number, ...unknown[]]>,
     client.readContract({ address: pool, abi, functionName: "liquidity" }) as Promise<bigint>,
   ]);
-  return { sqrtPriceX96: slot0[0], tick: Number(slot0[1]), liquidity };
+  // The protocol keeps part of every swap fee. PancakeSwap stores it per direction in units of
+  // 1/10000 (two 16-bit halves); Uniswap stores a denominator per direction (two 4-bit halves).
+  const packed = Number(slot0[5] ?? 0);
+  let protocolShare = 0;
+  if (chain.dex.kind === "pancake") protocolShare = ((packed & 0xffff) + (packed >>> 16)) / 2 / 10_000;
+  else {
+    const d0 = packed & 0xf;
+    const d1 = packed >> 4;
+    protocolShare = ((d0 ? 1 / d0 : 0) + (d1 ? 1 / d1 : 0)) / 2;
+  }
+  return { sqrtPriceX96: slot0[0], tick: Number(slot0[1]), liquidity, protocolShare };
 }
 
 /** Prices are quoted in the stable token when the pair has one, otherwise in token1. */

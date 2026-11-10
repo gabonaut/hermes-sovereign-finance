@@ -39,3 +39,22 @@ export async function relayServes(chain: Chain): Promise<boolean> {
   const body: any = await res.json();
   return Boolean(body?.result && `0x${chain.chainId.toString(16)}` in body.result);
 }
+
+/** Gas the relay adds to every intent when it prices its fee, read from the relay itself. */
+export async function relayGasBuffer(chain: Chain): Promise<bigint> {
+  const fallback = 2_650_000n;
+  try {
+    const res = await fetch(chain.relayUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "wallet_getCapabilities", params: [] }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body: any = await res.json();
+    const gas = body?.result?.[`0x${chain.chainId.toString(16)}`]?.fees?.quoteConfig?.gas;
+    const sum = BigInt(Math.round(Number(gas?.intentBuffer ?? 0))) + BigInt(Math.round(Number(gas?.txBuffer ?? 0)));
+    return sum > 0n ? sum : fallback;
+  } catch {
+    return fallback;
+  }
+}

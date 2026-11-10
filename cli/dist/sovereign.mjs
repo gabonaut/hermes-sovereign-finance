@@ -20224,7 +20224,10 @@ function decodeFailure(e) {
   const relayCode = relay ? Number(relay[1]) : null;
   let code = "FAILED";
   let message = parts[0] ?? String(e);
-  if (revert) {
+  if (/key hash 0x[0-9a-f]+ is unknown/i.test(raw)) {
+    code = "WALLET_KEY_UNKNOWN";
+    message = "The wallet does not accept this session key. It was revoked, or the session was never activated on this network.";
+  } else if (revert) {
     code = `WALLET_${revert.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()}`;
     message = EXPLAIN[revert] ?? `The wallet refused this batch (${revert}).`;
   } else if (relayCode === 300) {
@@ -47028,6 +47031,23 @@ async function relayServes(chain) {
   const body = await res.json();
   return Boolean(body?.result && `0x${chain.chainId.toString(16)}` in body.result);
 }
+async function relayGasBuffer(chain) {
+  const fallback = 2650000n;
+  try {
+    const res = await fetch(chain.relayUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "wallet_getCapabilities", params: [] }),
+      signal: AbortSignal.timeout(1e4)
+    });
+    const body = await res.json();
+    const gas = body?.result?.[`0x${chain.chainId.toString(16)}`]?.fees?.quoteConfig?.gas;
+    const sum = BigInt(Math.round(Number(gas?.intentBuffer ?? 0))) + BigInt(Math.round(Number(gas?.txBuffer ?? 0)));
+    return sum > 0n ? sum : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 // src/policy.ts
 var MAX_LIMIT = 10n ** 24n;
@@ -47268,7 +47288,7 @@ async function recoverWallet(ctx) {
   return { address: getAddress(address2) };
 }
 function estimateGrantGas(callEntries, spendEntries, firstAction) {
-  return BigInt(45e4 + callEntries * 28e3 + spendEntries * 55e3 + (firstAction ? 35e4 : 0));
+  return BigInt(5e5 + callEntries * 45e3 + spendEntries * 9e4 + (firstAction ? 55e4 : 0));
 }
 function ceil6(raw) {
   const unit = 10n ** 12n;
@@ -47276,10 +47296,10 @@ function ceil6(raw) {
 }
 async function costOf(chain, wallet, callEntries, spendEntries) {
   const client = rpc(chain);
-  const [fee, keys, gasPrice, balance] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet)]);
+  const [fee, keys, gasPrice, balance, buffer2] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet), relayGasBuffer(chain)]);
   const firstAction = keys.length === 0;
   const keystoreFee = fee * (firstAction ? 2n : 1n);
-  const relayFee = estimateGrantGas(callEntries, spendEntries, firstAction) * gasPrice * 13n / 10n;
+  const relayFee = (estimateGrantGas(callEntries, spendEntries, firstAction) + buffer2) * gasPrice * 125n / 100n;
   const total = keystoreFee + relayFee;
   return {
     cost: {
@@ -47626,7 +47646,15 @@ async function poolState(chain, pool) {
     client.readContract({ address: pool, abi: abi2, functionName: "slot0" }),
     client.readContract({ address: pool, abi: abi2, functionName: "liquidity" })
   ]);
-  return { sqrtPriceX96: slot0[0], tick: Number(slot0[1]), liquidity };
+  const packed = Number(slot0[5] ?? 0);
+  let protocolShare = 0;
+  if (chain.dex.kind === "pancake") protocolShare = ((packed & 65535) + (packed >>> 16)) / 2 / 1e4;
+  else {
+    const d0 = packed & 15;
+    const d1 = packed >> 4;
+    protocolShare = ((d0 ? 1 / d0 : 0) + (d1 ? 1 / d1 : 0)) / 2;
+  }
+  return { sqrtPriceX96: slot0[0], tick: Number(slot0[1]), liquidity, protocolShare };
 }
 function orient(t0, t1) {
   const invert2 = STABLES.has(t0.symbol) && !STABLES.has(t1.symbol);
@@ -47799,7 +47827,8 @@ async function listPools(chain, scope, limit = 10) {
         currentTick: state.tick,
         volume24hUsd: Math.round(volume),
         tvlUsd: Math.round(tvl),
-        feeAprPct: tvl > 0 ? Number((volume * fee / 1e6 / tvl * 365 * 100).toFixed(1)) : null,
+        feeAprPct: tvl > 0 ? Number((volume * fee / 1e6 / tvl * 365 * 100 * (1 - state.protocolShare)).toFixed(1)) : null,
+        protocolFeePct: Number((state.protocolShare * 100).toFixed(1)),
         supported: Boolean(a && b),
         inScope: inScope(a, b)
       };
@@ -47812,7 +47841,7 @@ async function listPools(chain, scope, limit = 10) {
       return row;
     })
   );
-  return { source: "DexScreener 24 h volume and liquidity; fee tier and tick read onchain. Fee APR = volume x fee / TVL x 365.", pools };
+  return { source: "DexScreener 24 h volume and liquidity; fee tier, protocol fee share and tick read onchain. Fee APR = volume x fee x (1 - protocol share) / TVL x 365, for liquidity spread like the pool's average. A narrow range that stays in range earns more.", pools };
 }
 async function resolvePool(chain, input2) {
   if (input2.pool && isAddress(String(input2.pool))) {
@@ -47912,12 +47941,15 @@ async function lpPlan(chain, wallet, input2) {
   let sqrtForMint = state.sqrtPriceX96;
   let swap = null;
   let impactPct = 0;
-  for (let round = 0; round < 3; round++) {
+  let sqrtRef = state.sqrtPriceX96;
+  let previousIn = 0n;
+  for (let round = 0; round < 4; round++) {
     h0 = start0;
     h1 = start1;
     swap = null;
-    const price192 = sqrtForMint * sqrtForMint;
-    const [r0, r1] = amountsForLiquidity(sqrtForMint, lo, hi, 10n ** 30n);
+    if (!explicit && round > 0) centreOn(tickOfSqrt(sqrtRef));
+    const price192 = sqrtRef * sqrtRef;
+    const [r0, r1] = amountsForLiquidity(sqrtRef, lo, hi, 10n ** 30n);
     const valueIn1 = h0 * price192 / Q192 + h1;
     const denom = r0 * price192 / Q192 + r1;
     if (denom === 0n || valueIn1 === 0n) throw new CliError("BAD_INPUT", "The budget is too small for this pool.");
@@ -47950,11 +47982,11 @@ async function lpPlan(chain, wallet, input2) {
       sqrtForMint = state.sqrtPriceX96;
       break;
     }
-    const after = tickOfSqrt(best.sqrtAfter);
-    const stillInside = lo <= after && after < hi;
     sqrtForMint = best.sqrtAfter;
-    if (stillInside || explicit) break;
-    centreOn(after);
+    const change = amountIn > previousIn ? amountIn - previousIn : previousIn - amountIn;
+    if (round > 0 && change * 100n <= amountIn) break;
+    previousIn = amountIn;
+    sqrtRef = best.sqrtAfter;
   }
   if (swap) actions.push(swap);
   if (impactPct > 2) notes.push(`This pool is thin: the entry swap trades about ${impactPct.toFixed(1)}% away from the pool price. A smaller budget loses less.`);
