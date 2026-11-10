@@ -97,6 +97,9 @@ export function decodeFailure(e: unknown): DecodedFailure {
   } else if (relayCode === 300) {
     code = "RELAY_REJECTED";
     message = "The relay rejected this batch before sending it. The usual cause is a native spend cap or balance too low to cover the relay fee.";
+  } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired/i.test(raw)) {
+    code = "QUOTE_EXPIRED";
+    message = "The approval took longer than the relay's fee quote lasts (30 seconds on mainnet). Nothing was sent. Start again and approve the passkey prompt promptly.";
   } else if (/insufficient|not enough/i.test(raw)) {
     code = "INSUFFICIENT_FUNDS";
   }

@@ -20230,6 +20230,9 @@ function decodeFailure(e) {
   } else if (relayCode === 300) {
     code = "RELAY_REJECTED";
     message = "The relay rejected this batch before sending it. The usual cause is a native spend cap or balance too low to cover the relay fee.";
+  } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired/i.test(raw)) {
+    code = "QUOTE_EXPIRED";
+    message = "The approval took longer than the relay's fee quote lasts (30 seconds on mainnet). Nothing was sent. Start again and approve the passkey prompt promptly.";
   } else if (/insufficient|not enough/i.test(raw)) {
     code = "INSUFFICIENT_FUNDS";
   }
@@ -20308,6 +20311,7 @@ function page(nonce) {
         current = r;
         seq = r.seq;
         promptEl.textContent = r.prompt;
+        approveBtn.textContent = r.kind === "ready" ? "Continue" : "Approve with passkey";
         buttons.hidden = false;
         approveBtn.disabled = false;
         cancelBtn.disabled = false;
@@ -20339,6 +20343,17 @@ function page(nonce) {
 
   approveBtn.addEventListener("click", function () {
     if (!current) return;
+    if (current.kind === "ready") {
+      var ready = current;
+      approveBtn.disabled = true;
+      post({ seq: ready.seq, ok: true, result: {} }).then(function () {
+        buttons.hidden = true;
+        promptEl.textContent = "Preparing the request.";
+        say("The passkey prompt comes next. Approve it promptly: the network quote behind it is short-lived.");
+        poll();
+      });
+      return;
+    }
     if (!window.PublicKeyCredential || !navigator.credentials) {
       say("This browser has no passkey support. Open this page's address in Chrome or Safari.");
       return;
@@ -20381,7 +20396,7 @@ async function browserTransport(job, log) {
     res.end(JSON.stringify(body));
   };
   const answerWaiter = (w) => {
-    if (pending && pending.seq > w.after) json2(w.res, 200, { seq: pending.seq, kind: pending.req.kind, prompt: pending.req.prompt, publicKey: pending.req.publicKey });
+    if (pending && pending.seq > w.after) json2(w.res, 200, { seq: pending.seq, kind: pending.kind, prompt: pending.prompt, publicKey: pending.publicKey });
     else if (closed) json2(w.res, 200, { done: true, message: closed.message });
     else return false;
     clearTimeout(w.timer);
@@ -20474,20 +20489,26 @@ async function browserTransport(job, log) {
   const address2 = `http://localhost:${port}${base2}`;
   job.setPasskeyUrl(address2);
   log(`Passkey page listening on the loopback interface, port ${port}`);
+  const ask = (kind, prompt, publicKey) => {
+    if (closed) return Promise.reject(new CliError("PASSKEY_CLOSED", "The passkey page is closed."));
+    if (pending) return Promise.reject(new CliError("PASSKEY_BUSY", "Another passkey request is still waiting."));
+    return new Promise((resolve, reject) => {
+      const mine = ++seq;
+      const timer = setTimeout(() => {
+        if (pending?.seq === mine) pending = null;
+        reject(new CliError("PASSKEY_TIMEOUT", "No approval arrived from the browser within five minutes. Nothing was signed."));
+      }, REQUEST_TIMEOUT_MS);
+      pending = { seq: mine, kind, prompt, publicKey, resolve, reject, timer };
+      job.waitingPasskey(prompt);
+      flush();
+    });
+  };
   const transport = {
     request(req) {
-      if (closed) return Promise.reject(new CliError("PASSKEY_CLOSED", "The passkey page is closed."));
-      if (pending) return Promise.reject(new CliError("PASSKEY_BUSY", "Another passkey request is still waiting."));
-      return new Promise((resolve, reject) => {
-        const mine = ++seq;
-        const timer = setTimeout(() => {
-          if (pending?.seq === mine) pending = null;
-          reject(new CliError("PASSKEY_TIMEOUT", "No passkey approval arrived within five minutes. Nothing was signed."));
-        }, REQUEST_TIMEOUT_MS);
-        pending = { seq: mine, req, resolve, reject, timer };
-        job.waitingPasskey(req.prompt);
-        flush();
-      });
+      return ask(req.kind, req.prompt, req.publicKey);
+    },
+    async ready(intro) {
+      await ask("ready", intro);
     },
     async close(message = "Done. You can close this tab.") {
       if (closed) return;
@@ -47185,11 +47206,12 @@ function requireWallet(ctx) {
   if (!w) throw new CliError("NO_WALLET", `No ${ctx.mode} wallet yet. Create one first.`);
   return w;
 }
-async function withPasskey(ctx, fn) {
+async function withPasskey(ctx, fn, intro) {
   const transport = await ctx.openTransport(ctx.job);
   let prompt = "";
   let ok = false;
   try {
+    if (intro && transport.ready) await transport.ready(intro);
     const out = await fn(webAuthnFns(transport, () => prompt), (p) => prompt = p);
     ok = true;
     return out;
@@ -47388,7 +47410,7 @@ async function activate(ctx, input2) {
       }
     }
     return out;
-  });
+  }, `Hermes is about to activate the agent's session on ${keys.map((k) => chainFor(ctx.mode, k).name).join(" and ")}. You will approve with your passkey once per network. Continue when you are ready.`);
   return { legs };
 }
 async function revoke(ctx, input2) {
@@ -47402,7 +47424,7 @@ async function revoke(ctx, input2) {
     say(`Revoke the agent's session on ${chain.name}. The agent's key stops working there.`);
     ctx.job.step(`Revoking on ${chain.name}`);
     return client.revokeSession({ wallet: { address: wallet.address }, signer: adminSigner(wallet, fns), session: record2.publicKey, chainId: chain.chainId });
-  });
+  }, `Hermes is about to revoke the agent's session on ${chain.name}. You will approve with your passkey once. Continue when you are ready.`);
   if (res.status === "FAILED") throw new CliError("REVOKE_FAILED", `The revoke on ${chain.name} did not confirm (relay code ${res.statusCode ?? "unknown"}). The session is still active.`);
   ctx.store.saveSession(chain.chainId, { ...record2, status: "revoked", revokeTx: res.transactionHash ?? null, revokedAt: (/* @__PURE__ */ new Date()).toISOString() });
   return { network: input2.network, txUrl: res.transactionHash ? txUrl(chain, res.transactionHash) : null };
@@ -47443,7 +47465,7 @@ async function withdraw(ctx, input2) {
     say(`Send ${formatUnits(amount, decimals)} ${symbol2} from your wallet on ${chain.name} to ${to}.`);
     ctx.job.step(`Sending ${symbol2} on ${chain.name}`);
     return client.execute({ wallet: { address: wallet.address }, signer: adminSigner(wallet, fns), calls, chainId: chain.chainId });
-  });
+  }, `Hermes is about to send ${formatUnits(amount, decimals)} ${symbol2} from your wallet on ${chain.name} to ${to}. You will approve with your passkey once. Continue when you are ready.`);
   if (res.status === "FAILED") throw new CliError("WITHDRAW_FAILED", `The transfer on ${chain.name} did not confirm (relay code ${res.statusCode ?? "unknown"}).`);
   return { network: input2.network, txUrl: res.transactionHash ? txUrl(chain, res.transactionHash) : null };
 }

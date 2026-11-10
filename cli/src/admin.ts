@@ -30,11 +30,13 @@ function requireWallet(ctx: AdminCtx): WalletRecord {
 }
 
 /** Run `fn` with the SDK's WebAuthn functions wired to a transport, and always close the transport. */
-async function withPasskey<T>(ctx: AdminCtx, fn: (fns: ReturnType<typeof webAuthnFns>, say: (prompt: string) => void) => Promise<T>): Promise<T> {
+async function withPasskey<T>(ctx: AdminCtx, fn: (fns: ReturnType<typeof webAuthnFns>, say: (prompt: string) => void) => Promise<T>, intro?: string): Promise<T> {
   const transport = await ctx.openTransport(ctx.job);
   let prompt = "";
   let ok = false;
   try {
+    // Signing actions wait for the user first, so the relay's short-lived quote is not spent on opening a tab.
+    if (intro && transport.ready) await transport.ready(intro);
     const out = await fn(webAuthnFns(transport, () => prompt), (p) => (prompt = p));
     ok = true;
     return out;
@@ -225,7 +227,7 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
       }
     }
     return out;
-  });
+  }, `Hermes is about to activate the agent's session on ${keys.map((k) => chainFor(ctx.mode, k).name).join(" and ")}. You will approve with your passkey once per network. Continue when you are ready.`);
   return { legs };
 }
 
@@ -240,7 +242,7 @@ export async function revoke(ctx: AdminCtx, input: { network: NetworkKey }) {
     say(`Revoke the agent's session on ${chain.name}. The agent's key stops working there.`);
     ctx.job.step(`Revoking on ${chain.name}`);
     return client.revokeSession({ wallet: { address: wallet.address }, signer: adminSigner(wallet, fns), session: record.publicKey, chainId: chain.chainId });
-  });
+  }, `Hermes is about to revoke the agent's session on ${chain.name}. You will approve with your passkey once. Continue when you are ready.`);
   if (res.status === "FAILED") throw new CliError("REVOKE_FAILED", `The revoke on ${chain.name} did not confirm (relay code ${res.statusCode ?? "unknown"}). The session is still active.`);
   ctx.store.saveSession(chain.chainId, { ...record, status: "revoked", revokeTx: res.transactionHash ?? null, revokedAt: new Date().toISOString() });
   return { network: input.network, txUrl: res.transactionHash ? txUrl(chain, res.transactionHash) : null };
@@ -283,7 +285,7 @@ export async function withdraw(ctx: AdminCtx, input: { network: NetworkKey; asse
     say(`Send ${formatUnits(amount, decimals)} ${symbol} from your wallet on ${chain.name} to ${to}.`);
     ctx.job.step(`Sending ${symbol} on ${chain.name}`);
     return client.execute({ wallet: { address: wallet.address }, signer: adminSigner(wallet, fns), calls: calls as any, chainId: chain.chainId });
-  });
+  }, `Hermes is about to send ${formatUnits(amount, decimals)} ${symbol} from your wallet on ${chain.name} to ${to}. You will approve with your passkey once. Continue when you are ready.`);
   if (res.status === "FAILED") throw new CliError("WITHDRAW_FAILED", `The transfer on ${chain.name} did not confirm (relay code ${res.statusCode ?? "unknown"}).`);
   return { network: input.network, txUrl: res.transactionHash ? txUrl(chain, res.transactionHash) : null };
 }

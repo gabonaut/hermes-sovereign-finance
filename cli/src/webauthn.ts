@@ -38,6 +38,11 @@ export type GetResponse = { id: string; authenticatorData: string; clientDataJSO
 export interface WebAuthnTransport {
   request(req: CreateRequest): Promise<CreateResponse>;
   request(req: GetRequest): Promise<GetResponse>;
+  /**
+   * Resolves once the user is at the authenticator and has said so. The relay's fee quote
+   * starts ageing when a transaction is prepared, so this runs before anything is prepared.
+   */
+  ready?(intro: string): Promise<void>;
   close(message?: string): Promise<void>;
 }
 
