@@ -154,7 +154,16 @@ function Harness() {
     </div>
   )
 
-  if (SHOT) return frame
+  if (SHOT) {
+    return (
+      <div className="hx-shot" id="shot">
+        <div className="hx-caption">
+          {fixtureById(fixtureId).title}, {width} px{dark ? ', dark' : ''}
+        </div>
+        {frame}
+      </div>
+    )
+  }
 
   const waiting = mounted.backend.waiting()
 

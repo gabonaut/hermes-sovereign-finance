@@ -912,3 +912,21 @@
 [data-shot] .hx-frame {
   border-right: 0;
 }
+
+[data-shot] .h-dialog-overlay {
+  backdrop-filter: none;
+}
+
+.hx-shot {
+  width: max-content;
+}
+
+.hx-caption {
+  padding: 5px 10px;
+  background: #33373d;
+  color: #f2f3f5;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  white-space: nowrap;
+}
