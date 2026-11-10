@@ -79,6 +79,7 @@ function page(nonce: string): string {
         current = r;
         seq = r.seq;
         promptEl.textContent = r.prompt;
+        approveBtn.textContent = r.kind === "ready" ? "Continue" : "Approve with passkey";
         buttons.hidden = false;
         approveBtn.disabled = false;
         cancelBtn.disabled = false;
@@ -110,6 +111,17 @@ function page(nonce: string): string {
 
   approveBtn.addEventListener("click", function () {
     if (!current) return;
+    if (current.kind === "ready") {
+      var ready = current;
+      approveBtn.disabled = true;
+      post({ seq: ready.seq, ok: true, result: {} }).then(function () {
+        buttons.hidden = true;
+        promptEl.textContent = "Preparing the request.";
+        say("The passkey prompt comes next. Approve it promptly: the network quote behind it is short-lived.");
+        poll();
+      });
+      return;
+    }
     if (!window.PublicKeyCredential || !navigator.credentials) {
       say("This browser has no passkey support. Open this page's address in Chrome or Safari.");
       return;
@@ -145,7 +157,8 @@ export async function browserTransport(job: JobReporter, log: (line: string) => 
   const base = `/p/${secret}`;
   let port = 0;
   let seq = 0;
-  let pending: { seq: number; req: BridgeRequest; resolve: (v: any) => void; reject: (e: Error) => void; timer: NodeJS.Timeout } | null = null;
+  type Pending = { seq: number; kind: string; prompt: string; publicKey?: unknown; resolve: (v: any) => void; reject: (e: Error) => void; timer: NodeJS.Timeout };
+  let pending: Pending | null = null;
   let closed: { message: string } | null = null;
   const waiters = new Set<{ after: number; res: http.ServerResponse; timer: NodeJS.Timeout }>();
 
@@ -154,7 +167,7 @@ export async function browserTransport(job: JobReporter, log: (line: string) => 
     res.end(JSON.stringify(body));
   };
   const answerWaiter = (w: { after: number; res: http.ServerResponse; timer: NodeJS.Timeout }): boolean => {
-    if (pending && pending.seq > w.after) json(w.res, 200, { seq: pending.seq, kind: pending.req.kind, prompt: pending.req.prompt, publicKey: pending.req.publicKey });
+    if (pending && pending.seq > w.after) json(w.res, 200, { seq: pending.seq, kind: pending.kind, prompt: pending.prompt, publicKey: pending.publicKey });
     else if (closed) json(w.res, 200, { done: true, message: closed.message });
     else return false;
     clearTimeout(w.timer);
@@ -252,20 +265,26 @@ export async function browserTransport(job: JobReporter, log: (line: string) => 
   job.setPasskeyUrl(address);
   log(`Passkey page listening on the loopback interface, port ${port}`);
 
+  const ask = (kind: string, prompt: string, publicKey?: unknown) => {
+    if (closed) return Promise.reject(new CliError("PASSKEY_CLOSED", "The passkey page is closed."));
+    if (pending) return Promise.reject(new CliError("PASSKEY_BUSY", "Another passkey request is still waiting."));
+    return new Promise<any>((resolve, reject) => {
+      const mine = ++seq;
+      const timer = setTimeout(() => {
+        if (pending?.seq === mine) pending = null;
+        reject(new CliError("PASSKEY_TIMEOUT", "No approval arrived from the browser within five minutes. Nothing was signed."));
+      }, REQUEST_TIMEOUT_MS);
+      pending = { seq: mine, kind, prompt, publicKey, resolve, reject, timer };
+      job.waitingPasskey(prompt);
+      flush();
+    });
+  };
   const transport = {
     request(req: BridgeRequest) {
-      if (closed) return Promise.reject(new CliError("PASSKEY_CLOSED", "The passkey page is closed."));
-      if (pending) return Promise.reject(new CliError("PASSKEY_BUSY", "Another passkey request is still waiting."));
-      return new Promise((resolve, reject) => {
-        const mine = ++seq;
-        const timer = setTimeout(() => {
-          if (pending?.seq === mine) pending = null;
-          reject(new CliError("PASSKEY_TIMEOUT", "No passkey approval arrived within five minutes. Nothing was signed."));
-        }, REQUEST_TIMEOUT_MS);
-        pending = { seq: mine, req, resolve, reject, timer };
-        job.waitingPasskey(req.prompt);
-        flush();
-      });
+      return ask(req.kind, req.prompt, req.publicKey);
+    },
+    async ready(intro: string) {
+      await ask("ready", intro);
     },
     async close(message = "Done. You can close this tab.") {
       if (closed) return;

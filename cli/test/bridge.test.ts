@@ -71,6 +71,15 @@ test("the passkey page serves one request at a time to a browser on localhost on
   assert.ok(created.response.getPublicKey().byteLength > 60);
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, "jobs", "job1.json"), "utf8")).status, "running");
 
+  // A ready step is a plain confirmation: no credential options are sent with it.
+  const waiting = transport.ready!("Hermes is about to activate. Continue when you are ready.");
+  const ready = await (await fetch(`${state.passkeyUrl}/next?after=${next.seq}`)).json();
+  assert.equal(ready.kind, "ready");
+  assert.equal(ready.publicKey, undefined);
+  await fetch(`${state.passkeyUrl}/result`, { method: "POST", body: JSON.stringify({ seq: ready.seq, ok: true, result: {} }) });
+  await waiting;
+  next.seq = ready.seq;
+
   // A cancelled request rejects, and closing tells the page it is done.
   const signing = fns.getFn({ publicKey: { challenge: crypto.randomBytes(32), rpId: "localhost", allowCredentials: [{ id: b64url.decode(created.id), type: "public-key" }] } } as any);
   const refused = assert.rejects(signing, /cancelled/);

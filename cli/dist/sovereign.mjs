@@ -20187,8 +20187,14 @@ function collectText(e, depth = 0, out = []) {
   if (e.cause) collectText(e.cause, depth + 1, out);
   return out;
 }
+function ownError(e, depth = 0) {
+  if (!e || depth > 6) return null;
+  if (e instanceof CliError) return e;
+  return ownError(e.cause, depth + 1);
+}
 function decodeFailure(e) {
-  if (e instanceof CliError) return { code: e.code, message: e.message, revert: null, relayCode: null, raw: e.message };
+  const own2 = ownError(e);
+  if (own2) return { code: own2.code, message: own2.message, revert: null, relayCode: null, raw: own2.message };
   const parts = [...new Set(collectText(e))];
   const raw = parts.join(" | ").slice(0, 4e3);
   let revert = null;
@@ -20224,12 +20230,18 @@ function decodeFailure(e) {
   const relayCode = relay ? Number(relay[1]) : null;
   let code = "FAILED";
   let message = parts[0] ?? String(e);
-  if (revert) {
+  if (/key hash 0x[0-9a-f]+ is unknown/i.test(raw)) {
+    code = "WALLET_KEY_UNKNOWN";
+    message = "The wallet does not accept this session key. It was revoked, or the session was never activated on this network.";
+  } else if (revert) {
     code = `WALLET_${revert.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()}`;
     message = EXPLAIN[revert] ?? `The wallet refused this batch (${revert}).`;
   } else if (relayCode === 300) {
     code = "RELAY_REJECTED";
     message = "The relay rejected this batch before sending it. The usual cause is a native spend cap or balance too low to cover the relay fee.";
+  } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired/i.test(raw)) {
+    code = "QUOTE_EXPIRED";
+    message = "The approval took longer than the relay's fee quote lasts (30 seconds on mainnet). Nothing was sent. Start again and approve the passkey prompt promptly.";
   } else if (/insufficient|not enough/i.test(raw)) {
     code = "INSUFFICIENT_FUNDS";
   }
@@ -20308,6 +20320,7 @@ function page(nonce) {
         current = r;
         seq = r.seq;
         promptEl.textContent = r.prompt;
+        approveBtn.textContent = r.kind === "ready" ? "Continue" : "Approve with passkey";
         buttons.hidden = false;
         approveBtn.disabled = false;
         cancelBtn.disabled = false;
@@ -20339,6 +20352,17 @@ function page(nonce) {
 
   approveBtn.addEventListener("click", function () {
     if (!current) return;
+    if (current.kind === "ready") {
+      var ready = current;
+      approveBtn.disabled = true;
+      post({ seq: ready.seq, ok: true, result: {} }).then(function () {
+        buttons.hidden = true;
+        promptEl.textContent = "Preparing the request.";
+        say("The passkey prompt comes next. Approve it promptly: the network quote behind it is short-lived.");
+        poll();
+      });
+      return;
+    }
     if (!window.PublicKeyCredential || !navigator.credentials) {
       say("This browser has no passkey support. Open this page's address in Chrome or Safari.");
       return;
@@ -20381,7 +20405,7 @@ async function browserTransport(job, log) {
     res.end(JSON.stringify(body));
   };
   const answerWaiter = (w) => {
-    if (pending && pending.seq > w.after) json2(w.res, 200, { seq: pending.seq, kind: pending.req.kind, prompt: pending.req.prompt, publicKey: pending.req.publicKey });
+    if (pending && pending.seq > w.after) json2(w.res, 200, { seq: pending.seq, kind: pending.kind, prompt: pending.prompt, publicKey: pending.publicKey });
     else if (closed) json2(w.res, 200, { done: true, message: closed.message });
     else return false;
     clearTimeout(w.timer);
@@ -20474,20 +20498,26 @@ async function browserTransport(job, log) {
   const address2 = `http://localhost:${port}${base2}`;
   job.setPasskeyUrl(address2);
   log(`Passkey page listening on the loopback interface, port ${port}`);
+  const ask = (kind, prompt, publicKey) => {
+    if (closed) return Promise.reject(new CliError("PASSKEY_CLOSED", "The passkey page is closed."));
+    if (pending) return Promise.reject(new CliError("PASSKEY_BUSY", "Another passkey request is still waiting."));
+    return new Promise((resolve, reject) => {
+      const mine = ++seq;
+      const timer = setTimeout(() => {
+        if (pending?.seq === mine) pending = null;
+        reject(new CliError("PASSKEY_TIMEOUT", "No approval arrived from the browser within five minutes. Nothing was signed."));
+      }, REQUEST_TIMEOUT_MS);
+      pending = { seq: mine, kind, prompt, publicKey, resolve, reject, timer };
+      job.waitingPasskey(prompt);
+      flush();
+    });
+  };
   const transport = {
     request(req) {
-      if (closed) return Promise.reject(new CliError("PASSKEY_CLOSED", "The passkey page is closed."));
-      if (pending) return Promise.reject(new CliError("PASSKEY_BUSY", "Another passkey request is still waiting."));
-      return new Promise((resolve, reject) => {
-        const mine = ++seq;
-        const timer = setTimeout(() => {
-          if (pending?.seq === mine) pending = null;
-          reject(new CliError("PASSKEY_TIMEOUT", "No passkey approval arrived within five minutes. Nothing was signed."));
-        }, REQUEST_TIMEOUT_MS);
-        pending = { seq: mine, req, resolve, reject, timer };
-        job.waitingPasskey(req.prompt);
-        flush();
-      });
+      return ask(req.kind, req.prompt, req.publicKey);
+    },
+    async ready(intro) {
+      await ask("ready", intro);
     },
     async close(message = "Done. You can close this tab.") {
       if (closed) return;
@@ -47007,6 +47037,23 @@ async function relayServes(chain) {
   const body = await res.json();
   return Boolean(body?.result && `0x${chain.chainId.toString(16)}` in body.result);
 }
+async function relayGasBuffer(chain) {
+  const fallback = 2650000n;
+  try {
+    const res = await fetch(chain.relayUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "wallet_getCapabilities", params: [] }),
+      signal: AbortSignal.timeout(1e4)
+    });
+    const body = await res.json();
+    const gas = body?.result?.[`0x${chain.chainId.toString(16)}`]?.fees?.quoteConfig?.gas;
+    if (!gas) return fallback;
+    return BigInt(Math.round(Number(gas.intentBuffer ?? 0))) + BigInt(Math.round(Number(gas.txBuffer ?? 0)));
+  } catch {
+    return fallback;
+  }
+}
 
 // src/policy.ts
 var MAX_LIMIT = 10n ** 24n;
@@ -47185,11 +47232,12 @@ function requireWallet(ctx) {
   if (!w) throw new CliError("NO_WALLET", `No ${ctx.mode} wallet yet. Create one first.`);
   return w;
 }
-async function withPasskey(ctx, fn) {
+async function withPasskey(ctx, fn, intro) {
   const transport = await ctx.openTransport(ctx.job);
   let prompt = "";
   let ok = false;
   try {
+    if (intro && transport.ready) await transport.ready(intro);
     const out = await fn(webAuthnFns(transport, () => prompt), (p) => prompt = p);
     ok = true;
     return out;
@@ -47246,25 +47294,31 @@ async function recoverWallet(ctx) {
   return { address: getAddress(address2) };
 }
 function estimateGrantGas(callEntries, spendEntries, firstAction) {
-  return BigInt(45e4 + callEntries * 28e3 + spendEntries * 55e3 + (firstAction ? 35e4 : 0));
+  return BigInt(5e5 + callEntries * 45e3 + spendEntries * 9e4 + (firstAction ? 55e4 : 0));
+}
+function ceil6(raw) {
+  const unit = 10n ** 12n;
+  return formatUnits((raw + unit - 1n) / unit * unit, 18);
 }
 async function costOf(chain, wallet, callEntries, spendEntries) {
   const client = rpc(chain);
-  const [fee, keys, gasPrice, balance] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet)]);
+  const [fee, keys, gasPrice, balance, buffer2] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet), relayGasBuffer(chain)]);
   const firstAction = keys.length === 0;
   const keystoreFee = fee * (firstAction ? 2n : 1n);
-  const relayFee = estimateGrantGas(callEntries, spendEntries, firstAction) * gasPrice * 13n / 10n;
+  const relayFee = (estimateGrantGas(callEntries, spendEntries, firstAction) + buffer2) * gasPrice * 125n / 100n;
   const total = keystoreFee + relayFee;
   return {
     cost: {
-      keystoreFee: formatUnits(keystoreFee, 18),
-      relayFeeEstimate: formatUnits(relayFee, 18),
-      total: formatUnits(total, 18),
+      keystoreFee: ceil6(keystoreFee),
+      relayFeeEstimate: ceil6(relayFee),
+      total: ceil6(total),
       nativeSymbol: chain.nativeSymbol,
       firstAction
     },
     balance: formatUnits(balance, 18),
-    sufficient: balance >= total
+    sufficient: balance >= total,
+    keystoreFeeRaw: keystoreFee,
+    balanceRaw: balance
   };
 }
 async function grantDraft(ctx, input2) {
@@ -47279,7 +47333,7 @@ async function grantDraft(ctx, input2) {
   for (const key of keys) {
     const chain = chainFor(ctx.mode, key);
     const policy = compilePolicy(chain, input2.networks[key], expiry);
-    const priced = await costOf(chain, wallet.address, policy.permissions.calls.length, policy.permissions.spend.length);
+    const { keystoreFeeRaw: _fee, balanceRaw: _balance, ...priced } = await costOf(chain, wallet.address, policy.permissions.calls.length, policy.permissions.spend.length);
     draft.networks[key] = { scopeText: policy.scopeText, ...priced };
     draft.inputs[key] = input2.networks[key];
   }
@@ -47308,6 +47362,12 @@ async function activate(ctx, input2) {
       try {
         const policy = compilePolicy(chain, draft.inputs[key], draft.expiry);
         let record2 = ctx.store.session(chain.chainId);
+        if (!(record2?.status === "active" && record2.draftId === draft.id)) {
+          const priced = await costOf(chain, wallet.address, policy.permissions.calls.length, policy.permissions.spend.length);
+          if (priced.balanceRaw < priced.keystoreFeeRaw) {
+            throw new CliError("INSUFFICIENT_FUNDS", `The wallet holds ${priced.balance} ${chain.nativeSymbol} on ${chain.name}. Activation needs about ${priced.cost.total}. Send more and activate again.`);
+          }
+        }
         if (record2?.status === "active" && record2.draftId === draft.id) {
           leg.status = "confirmed";
           leg.txUrl = record2.grantTx ? txUrl(chain, record2.grantTx) : null;
@@ -47354,7 +47414,6 @@ async function activate(ctx, input2) {
           ctx.store.saveSession(chain.chainId, record2);
         }
         const sessionSigner = signerFromPrivateKey(secret);
-        leg.keystoreKeyUrl = keystoreKeyUrl(chain, record2.keyId);
         const before = await nativeBalance(chain, wallet.address);
         ctx.job.step(`Activating on ${chain.name}`);
         say(`Activate the agent's session on ${chain.name}. ${policy.scopeText.slice(4, 6).join(" ")} ${policy.scopeText.at(-1)}`);
@@ -47380,6 +47439,7 @@ async function activate(ctx, input2) {
         ctx.store.saveSession(chain.chainId, active);
         leg.status = "confirmed";
         leg.txUrl = session.transactionHash ? txUrl(chain, session.transactionHash) : null;
+        leg.keystoreKeyUrl = keystoreKeyUrl(chain, active.keyId);
         leg.charged = charged;
       } catch (e) {
         const f = decodeFailure(e);
@@ -47388,7 +47448,7 @@ async function activate(ctx, input2) {
       }
     }
     return out;
-  });
+  }, `Hermes is about to activate the agent's session on ${keys.map((k) => chainFor(ctx.mode, k).name).join(" and ")}. You will approve with your passkey once per network. Continue when you are ready.`);
   return { legs };
 }
 async function revoke(ctx, input2) {
@@ -47402,7 +47462,7 @@ async function revoke(ctx, input2) {
     say(`Revoke the agent's session on ${chain.name}. The agent's key stops working there.`);
     ctx.job.step(`Revoking on ${chain.name}`);
     return client.revokeSession({ wallet: { address: wallet.address }, signer: adminSigner(wallet, fns), session: record2.publicKey, chainId: chain.chainId });
-  });
+  }, `Hermes is about to revoke the agent's session on ${chain.name}. You will approve with your passkey once. Continue when you are ready.`);
   if (res.status === "FAILED") throw new CliError("REVOKE_FAILED", `The revoke on ${chain.name} did not confirm (relay code ${res.statusCode ?? "unknown"}). The session is still active.`);
   ctx.store.saveSession(chain.chainId, { ...record2, status: "revoked", revokeTx: res.transactionHash ?? null, revokedAt: (/* @__PURE__ */ new Date()).toISOString() });
   return { network: input2.network, txUrl: res.transactionHash ? txUrl(chain, res.transactionHash) : null };
@@ -47443,7 +47503,7 @@ async function withdraw(ctx, input2) {
     say(`Send ${formatUnits(amount, decimals)} ${symbol2} from your wallet on ${chain.name} to ${to}.`);
     ctx.job.step(`Sending ${symbol2} on ${chain.name}`);
     return client.execute({ wallet: { address: wallet.address }, signer: adminSigner(wallet, fns), calls, chainId: chain.chainId });
-  });
+  }, `Hermes is about to send ${formatUnits(amount, decimals)} ${symbol2} from your wallet on ${chain.name} to ${to}. You will approve with your passkey once. Continue when you are ready.`);
   if (res.status === "FAILED") throw new CliError("WITHDRAW_FAILED", `The transfer on ${chain.name} did not confirm (relay code ${res.statusCode ?? "unknown"}).`);
   return { network: input2.network, txUrl: res.transactionHash ? txUrl(chain, res.transactionHash) : null };
 }
@@ -47592,7 +47652,15 @@ async function poolState(chain, pool) {
     client.readContract({ address: pool, abi: abi2, functionName: "slot0" }),
     client.readContract({ address: pool, abi: abi2, functionName: "liquidity" })
   ]);
-  return { sqrtPriceX96: slot0[0], tick: Number(slot0[1]), liquidity };
+  const packed = Number(slot0[5] ?? 0);
+  let protocolShare = 0;
+  if (chain.dex.kind === "pancake") protocolShare = ((packed & 65535) + (packed >>> 16)) / 2 / 1e4;
+  else {
+    const d0 = packed & 15;
+    const d1 = packed >> 4;
+    protocolShare = ((d0 ? 1 / d0 : 0) + (d1 ? 1 / d1 : 0)) / 2;
+  }
+  return { sqrtPriceX96: slot0[0], tick: Number(slot0[1]), liquidity, protocolShare };
 }
 function orient(t0, t1) {
   const invert2 = STABLES.has(t0.symbol) && !STABLES.has(t1.symbol);
@@ -47765,7 +47833,8 @@ async function listPools(chain, scope, limit = 10) {
         currentTick: state.tick,
         volume24hUsd: Math.round(volume),
         tvlUsd: Math.round(tvl),
-        feeAprPct: tvl > 0 ? Number((volume * fee / 1e6 / tvl * 365 * 100).toFixed(1)) : null,
+        feeAprPct: tvl > 0 ? Number((volume * fee / 1e6 / tvl * 365 * 100 * (1 - state.protocolShare)).toFixed(1)) : null,
+        protocolFeePct: Number((state.protocolShare * 100).toFixed(1)),
         supported: Boolean(a && b),
         inScope: inScope(a, b)
       };
@@ -47778,7 +47847,7 @@ async function listPools(chain, scope, limit = 10) {
       return row;
     })
   );
-  return { source: "DexScreener 24 h volume and liquidity; fee tier and tick read onchain. Fee APR = volume x fee / TVL x 365.", pools };
+  return { source: "DexScreener 24 h volume and liquidity; fee tier, protocol fee share and tick read onchain. Fee APR = volume x fee x (1 - protocol share) / TVL x 365, for liquidity spread like the pool's average. A narrow range that stays in range earns more.", pools };
 }
 async function resolvePool(chain, input2) {
   if (input2.pool && isAddress(String(input2.pool))) {
@@ -47878,12 +47947,15 @@ async function lpPlan(chain, wallet, input2) {
   let sqrtForMint = state.sqrtPriceX96;
   let swap = null;
   let impactPct = 0;
-  for (let round = 0; round < 3; round++) {
+  let sqrtRef = state.sqrtPriceX96;
+  let previousIn = 0n;
+  for (let round = 0; round < 4; round++) {
     h0 = start0;
     h1 = start1;
     swap = null;
-    const price192 = sqrtForMint * sqrtForMint;
-    const [r0, r1] = amountsForLiquidity(sqrtForMint, lo, hi, 10n ** 30n);
+    if (!explicit && round > 0) centreOn(tickOfSqrt(sqrtRef));
+    const price192 = sqrtRef * sqrtRef;
+    const [r0, r1] = amountsForLiquidity(sqrtRef, lo, hi, 10n ** 30n);
     const valueIn1 = h0 * price192 / Q192 + h1;
     const denom = r0 * price192 / Q192 + r1;
     if (denom === 0n || valueIn1 === 0n) throw new CliError("BAD_INPUT", "The budget is too small for this pool.");
@@ -47916,11 +47988,11 @@ async function lpPlan(chain, wallet, input2) {
       sqrtForMint = state.sqrtPriceX96;
       break;
     }
-    const after = tickOfSqrt(best.sqrtAfter);
-    const stillInside = lo <= after && after < hi;
     sqrtForMint = best.sqrtAfter;
-    if (stillInside || explicit) break;
-    centreOn(after);
+    const change = amountIn > previousIn ? amountIn - previousIn : previousIn - amountIn;
+    if (round > 0 && change * 100n <= amountIn) break;
+    previousIn = amountIn;
+    sqrtRef = best.sqrtAfter;
   }
   if (swap) actions.push(swap);
   if (impactPct > 2) notes.push(`This pool is thin: the entry swap trades about ${impactPct.toFixed(1)}% away from the pool price. A smaller budget loses less.`);
@@ -48002,8 +48074,8 @@ function tokenId(text2) {
 function compile2(chain, wallet, actions, deadline) {
   if (!Array.isArray(actions) || actions.length === 0) throw new CliError("BAD_ACTION", "The batch is empty.");
   if (actions.length > MAX_ACTIONS) throw new CliError("BAD_ACTION", `At most ${MAX_ACTIONS} actions per batch.`);
-  const hasRaw = actions.some((a) => a?.type === "raw");
-  if (hasRaw && actions.some((a) => a?.type !== "raw")) throw new CliError("BAD_ACTION", "A raw call cannot share a batch with typed actions.");
+  const unscoped = (a) => a?.type === "raw" || a?.type === "transfer";
+  if (actions.some(unscoped) && !actions.every(unscoped)) throw new CliError("BAD_ACTION", "A transfer or raw call cannot share a batch with other actions.");
   const dex = chain.dex;
   const native = { decimals: 18, symbol: chain.nativeSymbol };
   const calls = [];
@@ -48088,6 +48160,18 @@ function compile2(chain, wallet, actions, deadline) {
       case "burn":
         calls.push({ to: dex.positionManager, data: encodeFunctionData({ abi: positionManagerAbi, functionName: "burn", args: [tokenId(a.tokenId)] }), value: 0n });
         break;
+      case "transfer": {
+        if (!isAddress(String(a.to))) throw new CliError("BAD_ACTION", "transfer.to is not an address.");
+        const to = getAddress(String(a.to));
+        const isNative = String(a.token ?? "").toLowerCase() === chain.nativeSymbol.toLowerCase() || String(a.token ?? "").toLowerCase() === "native";
+        if (isNative) {
+          calls.push({ to, data: "0x", value: units(a.amount, native, "transfer amount") });
+        } else {
+          const asset = requireAsset(chain, a.token);
+          calls.push({ to: asset.address, data: encodeFunctionData({ abi: erc20Abi2, functionName: "transfer", args: [to, units(a.amount, asset, "transfer amount")] }), value: 0n });
+        }
+        break;
+      }
       case "raw": {
         if (!isAddress(String(a.to))) throw new CliError("BAD_ACTION", "raw.to is not an address.");
         const data = a.data ?? "0x";
@@ -48103,7 +48187,7 @@ function compile2(chain, wallet, actions, deadline) {
         break;
       }
       default:
-        throw new CliError("BAD_ACTION", `Unknown action type "${a?.type}". Use wrap, unwrap, swap, mint, increase, decrease, collect, burn or raw.`);
+        throw new CliError("BAD_ACTION", `Unknown action type "${a?.type}". Use wrap, unwrap, swap, mint, increase, decrease, collect, burn, transfer or raw.`);
     }
   }
   return calls;
@@ -48219,7 +48303,7 @@ function describe3(chain, wallet, calls, opts) {
     if (inScope(call2.to, selector)) {
       violations.push(`A raw call targets ${call2.to} ${selector}, which the session covers. Use a typed action for it so recipients and approvals are checked.`);
     }
-    let what = `call ${call2.to} with selector ${selector}`;
+    let what = call2.data === "0x" ? `send ${amountText(call2.value, { decimals: 18, symbol: chain.nativeSymbol })} to ${call2.to}` : `call ${call2.to} with selector ${selector}`;
     if (asset && selector === SEL.transfer) {
       try {
         const { args } = decodeFunctionData({ abi: erc20Abi2, data: call2.data });
@@ -48229,10 +48313,10 @@ function describe3(chain, wallet, calls, opts) {
     } else if (asset) {
       what = `call ${asset.symbol} (${call2.to}) with selector ${selector}`;
     }
-    if (call2.value > 0n) what += `, sending ${amountText(call2.value, { decimals: 18, symbol: chain.nativeSymbol })}`;
+    if (call2.value > 0n && call2.data !== "0x") what += `, sending ${amountText(call2.value, { decimals: 18, symbol: chain.nativeSymbol })}`;
     parts.push(what);
   }
-  if (rawCount > 0 && rawCount !== calls.length) violations.push("A raw call cannot share a batch with typed actions.");
+  if (rawCount > 0 && rawCount !== calls.length) violations.push("A transfer or raw call cannot share a batch with other actions.");
   let kind = "other";
   let ruleKey = `sovereign:${chain.chainId}:once:${crypto5.randomBytes(6).toString("hex")}`;
   if (rawCount > 0) {

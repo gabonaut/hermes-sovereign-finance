@@ -53,8 +53,16 @@ function collectText(e: any, depth = 0, out: string[] = []): string[] {
 export type DecodedFailure = { code: string; message: string; revert: string | null; relayCode: number | null; raw: string };
 
 /** Turn whatever the SDK, the relay or viem threw into a code, a plain sentence and the raw text. */
+/** The plugin's own error, if one sits anywhere in the cause chain (libraries wrap what they are handed). */
+function ownError(e: any, depth = 0): CliError | null {
+  if (!e || depth > 6) return null;
+  if (e instanceof CliError) return e;
+  return ownError(e.cause, depth + 1);
+}
+
 export function decodeFailure(e: unknown): DecodedFailure {
-  if (e instanceof CliError) return { code: e.code, message: e.message, revert: null, relayCode: null, raw: e.message };
+  const own = ownError(e);
+  if (own) return { code: own.code, message: own.message, revert: null, relayCode: null, raw: own.message };
   const parts = [...new Set(collectText(e))];
   const raw = parts.join(" | ").slice(0, 4000);
   let revert: string | null = null;
@@ -91,12 +99,18 @@ export function decodeFailure(e: unknown): DecodedFailure {
   const relayCode = relay ? Number(relay[1]) : null;
   let code = "FAILED";
   let message = parts[0] ?? String(e);
-  if (revert) {
+  if (/key hash 0x[0-9a-f]+ is unknown/i.test(raw)) {
+    code = "WALLET_KEY_UNKNOWN";
+    message = "The wallet does not accept this session key. It was revoked, or the session was never activated on this network.";
+  } else if (revert) {
     code = `WALLET_${revert.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()}`;
     message = EXPLAIN[revert] ?? `The wallet refused this batch (${revert}).`;
   } else if (relayCode === 300) {
     code = "RELAY_REJECTED";
     message = "The relay rejected this batch before sending it. The usual cause is a native spend cap or balance too low to cover the relay fee.";
+  } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired/i.test(raw)) {
+    code = "QUOTE_EXPIRED";
+    message = "The approval took longer than the relay's fee quote lasts (30 seconds on mainnet). Nothing was sent. Start again and approve the passkey prompt promptly.";
   } else if (/insufficient|not enough/i.test(raw)) {
     code = "INSUFFICIENT_FUNDS";
   }
