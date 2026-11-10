@@ -47330,6 +47330,12 @@ async function activate(ctx, input2) {
       try {
         const policy = compilePolicy(chain, draft.inputs[key], draft.expiry);
         let record2 = ctx.store.session(chain.chainId);
+        if (!(record2?.status === "active" && record2.draftId === draft.id)) {
+          const priced = await costOf(chain, wallet.address, policy.permissions.calls.length, policy.permissions.spend.length);
+          if (parseUnits(priced.balance, 18) < parseUnits(priced.cost.keystoreFee, 18)) {
+            throw new CliError("INSUFFICIENT_FUNDS", `The wallet holds ${priced.balance} ${chain.nativeSymbol} on ${chain.name}. Activation needs about ${priced.cost.total}. Send more and activate again.`);
+          }
+        }
         if (record2?.status === "active" && record2.draftId === draft.id) {
           leg.status = "confirmed";
           leg.txUrl = record2.grantTx ? txUrl(chain, record2.grantTx) : null;

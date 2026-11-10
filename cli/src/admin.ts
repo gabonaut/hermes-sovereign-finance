@@ -167,6 +167,13 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
       try {
         const policy = compilePolicy(chain, draft.inputs[key], draft.expiry);
         let record = ctx.store.session(chain.chainId);
+        // The Keystore fee is paid from the wallet, so the balance is checked before anything is signed.
+        if (!(record?.status === "active" && record.draftId === draft.id)) {
+          const priced = await costOf(chain, wallet.address, policy.permissions.calls!.length, policy.permissions.spend!.length);
+          if (parseUnits(priced.balance, 18) < parseUnits(priced.cost.keystoreFee, 18)) {
+            throw new CliError("INSUFFICIENT_FUNDS", `The wallet holds ${priced.balance} ${chain.nativeSymbol} on ${chain.name}. Activation needs about ${priced.cost.total}. Send more and activate again.`);
+          }
+        }
 
         if (record?.status === "active" && record.draftId === draft.id) {
           leg.status = "confirmed";
