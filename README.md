@@ -38,6 +38,8 @@ After that the pane shows, per network, the session's scope and expiry, open pos
 
 Testnet mode (BNB testnet and Sepolia) is the default. Mainnet mode uses a separate wallet with its own passkey.
 
+Run the full testnet flow on BNB testnet. On Sepolia you can create, fund and withdraw, but activation with the V3 LP preset does not go through at the moment. The pane says so when it happens, and nothing is charged.
+
 ## What the agent gets
 
 | Tool | What it does |

@@ -5,7 +5,7 @@ import { positionManagerAbi } from "./abi.ts";
 import { compile, describe, type Action } from "./actions.ts";
 import { addressUrl, altanaClient, chainFor, chainsFor, keystoreAccountUrl, keystoreKeyUrl, rpc, txUrl, type Chain, type Mode, type NetworkKey } from "./config.ts";
 import { balances, isValidKey } from "./chainread.ts";
-import { CliError, decodeFailure } from "./errors.ts";
+import { CliError, decodeFailure, relayDropped } from "./errors.ts";
 import { listPositions, positionCache } from "./positions.ts";
 import type { SessionRecord, Store } from "./store.ts";
 
@@ -111,7 +111,7 @@ export async function execute(ctx: Ctx, input: { network: NetworkKey; actions: A
   try {
     const res = await client.execute({ session, calls: calls.map((c) => ({ to: c.to, data: c.data, value: c.value })) as any, chainId: chain.chainId });
     if (res.status === "FAILED") {
-      return { ok: false, network: input.network, did: d.parts, error: { code: res.statusCode === 300 ? "RELAY_REJECTED" : "FAILED", message: `The batch did not confirm (relay code ${res.statusCode ?? "unknown"}).`, relayCode: res.statusCode ?? null }, txUrl: res.transactionHash ? txUrl(chain, res.transactionHash) : null };
+      return { ok: false, network: input.network, did: d.parts, error: { code: res.statusCode === 300 ? "RELAY_REJECTED" : "FAILED", message: res.statusCode === 300 ? relayDropped(chain.relayNote) : `The batch did not confirm (relay code ${res.statusCode ?? "unknown"}).`, relayCode: res.statusCode ?? null }, txUrl: res.transactionHash ? txUrl(chain, res.transactionHash) : null };
     }
     // Refresh the position cache so the next approval sentence knows any new position.
     await listPositions(ctx.store, chain, wallet.address).catch(() => {});
@@ -119,6 +119,6 @@ export async function execute(ctx: Ctx, input: { network: NetworkKey; actions: A
   } catch (e) {
     const f = decodeFailure(e);
     ctx.log(`execute ${chain.name} failed: ${f.raw}`);
-    return { ok: false, network: input.network, did: d.parts, error: { code: f.code, message: f.message, revert: f.revert, relayCode: f.relayCode, raw: f.raw.slice(0, 1200) } };
+    return { ok: false, network: input.network, did: d.parts, error: { code: f.code, message: f.code === "RELAY_REJECTED" ? relayDropped(chain.relayNote) : f.message, revert: f.revert, relayCode: f.relayCode, raw: f.raw.slice(0, 1200) } };
   }
 }

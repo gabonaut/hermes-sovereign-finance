@@ -20192,6 +20192,10 @@ function ownError(e, depth = 0) {
   if (e instanceof CliError) return e;
   return ownError(e.cause, depth + 1);
 }
+function relayDropped(note) {
+  const base2 = "The relay dropped this batch without sending a transaction, so nothing was charged. The usual causes are a native cap or balance too low for the relay fee, or a batch that needs more gas than the relay allowed.";
+  return note ? `${base2} ${note}` : base2;
+}
 function decodeFailure(e) {
   const own2 = ownError(e);
   if (own2) return { code: own2.code, message: own2.message, revert: null, relayCode: null, raw: own2.message };
@@ -20238,7 +20242,7 @@ function decodeFailure(e) {
     message = EXPLAIN[revert] ?? `The wallet refused this batch (${revert}).`;
   } else if (relayCode === 300) {
     code = "RELAY_REJECTED";
-    message = "The relay rejected this batch before sending it. The usual cause is a native spend cap or balance too low to cover the relay fee.";
+    message = relayDropped();
   } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired/i.test(raw)) {
     code = "QUOTE_EXPIRED";
     message = "The approval took longer than the relay's fee quote lasts (30 seconds on mainnet). Nothing was sent. Start again and approve the passkey prompt promptly.";
@@ -46794,6 +46798,7 @@ var networks_default = {
       shortName: "Sepolia",
       nativeSymbol: "SepoliaETH",
       sdkConfig: null,
+      relayNote: "On Sepolia, batches that write many new storage slots do not go through at the moment, and the full V3 LP permission set is one of them. BNB Chain testnet runs the whole flow.",
       rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
       relayUrl: "https://testnet-relay.altana.network",
       explorerUrl: "https://sepolia.etherscan.io",
@@ -46909,6 +46914,55 @@ var networks_default = {
   }
 };
 
+// src/relaycompat.ts
+function dropUnnamedAssetDiffs(result) {
+  const diffs = result?.capabilities?.assetDiffs;
+  if (!diffs || typeof diffs !== "object") return false;
+  let changed = false;
+  for (const rows of Object.values(diffs)) {
+    if (!Array.isArray(rows)) continue;
+    for (const row of rows) {
+      if (!Array.isArray(row) || !Array.isArray(row[1])) continue;
+      const kept = row[1].filter((entry) => typeof entry?.symbol === "string");
+      if (kept.length !== row[1].length) {
+        row[1] = kept;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+function urlOf(input2) {
+  if (typeof input2 === "string") return input2;
+  if (input2 instanceof URL) return input2.href;
+  return String(input2?.url ?? "");
+}
+var origins = /* @__PURE__ */ new Set();
+var installed = false;
+function installRelayCompat(relayUrls) {
+  for (const u of relayUrls) origins.add(new URL(u).origin);
+  if (installed) return;
+  installed = true;
+  const inner = globalThis.fetch;
+  globalThis.fetch = async (input2, init) => {
+    const response = await inner(input2, init);
+    try {
+      if (!response.ok || !origins.has(new URL(urlOf(input2)).origin)) return response;
+      const payload = await response.clone().json();
+      let changed = false;
+      for (const item of Array.isArray(payload) ? payload : [payload]) {
+        if (dropUnnamedAssetDiffs(item?.result)) changed = true;
+      }
+      if (!changed) return response;
+      const headers = new Headers(response.headers);
+      for (const name of ["content-length", "content-encoding", "transfer-encoding"]) headers.delete(name);
+      return new Response(JSON.stringify(payload), { status: response.status, statusText: response.statusText, headers });
+    } catch {
+      return response;
+    }
+  };
+}
+
 // src/config.ts
 var NETWORK_KEYS = ["bnb", "ethereum"];
 var SDK_CONFIGS = { BNB, ETHEREUM, BNB_TESTNET };
@@ -46943,7 +46997,8 @@ function parseChain(id, raw) {
     wrappedNative: wrapped,
     assets,
     preset: raw.preset,
-    sdkConfig: raw.sdkConfig
+    sdkConfig: raw.sdkConfig,
+    relayNote: typeof raw.relayNote === "string" ? raw.relayNote : null
   };
 }
 var CHAINS = Object.fromEntries(
@@ -46980,7 +47035,9 @@ function sdkNetwork(chain) {
   };
 }
 function altanaClient(chains) {
-  return createClient2({ chains: chains.map(sdkNetwork) });
+  const networks = chains.map(sdkNetwork);
+  installRelayCompat(networks.map((n) => n.relayUrl));
+  return createClient2({ chains: networks });
 }
 var rpcCache = /* @__PURE__ */ new Map();
 function rpc(chain) {
@@ -47444,7 +47501,7 @@ async function activate(ctx, input2) {
       } catch (e) {
         const f = decodeFailure(e);
         ctx.log(`activate ${chain.name} failed: ${f.raw}`);
-        leg.error = f.message;
+        leg.error = f.code === "RELAY_REJECTED" ? relayDropped(chain.relayNote) : f.message;
       }
     }
     return out;
@@ -48435,7 +48492,7 @@ async function execute2(ctx, input2) {
   try {
     const res = await client.execute({ session, calls: calls.map((c) => ({ to: c.to, data: c.data, value: c.value })), chainId: chain.chainId });
     if (res.status === "FAILED") {
-      return { ok: false, network: input2.network, did: d.parts, error: { code: res.statusCode === 300 ? "RELAY_REJECTED" : "FAILED", message: `The batch did not confirm (relay code ${res.statusCode ?? "unknown"}).`, relayCode: res.statusCode ?? null }, txUrl: res.transactionHash ? txUrl(chain, res.transactionHash) : null };
+      return { ok: false, network: input2.network, did: d.parts, error: { code: res.statusCode === 300 ? "RELAY_REJECTED" : "FAILED", message: res.statusCode === 300 ? relayDropped(chain.relayNote) : `The batch did not confirm (relay code ${res.statusCode ?? "unknown"}).`, relayCode: res.statusCode ?? null }, txUrl: res.transactionHash ? txUrl(chain, res.transactionHash) : null };
     }
     await listPositions(ctx.store, chain, wallet.address).catch(() => {
     });
@@ -48443,7 +48500,7 @@ async function execute2(ctx, input2) {
   } catch (e) {
     const f = decodeFailure(e);
     ctx.log(`execute ${chain.name} failed: ${f.raw}`);
-    return { ok: false, network: input2.network, did: d.parts, error: { code: f.code, message: f.message, revert: f.revert, relayCode: f.relayCode, raw: f.raw.slice(0, 1200) } };
+    return { ok: false, network: input2.network, did: d.parts, error: { code: f.code, message: f.code === "RELAY_REJECTED" ? relayDropped(chain.relayNote) : f.message, revert: f.revert, relayCode: f.relayCode, raw: f.raw.slice(0, 1200) } };
   }
 }
 

@@ -47,6 +47,7 @@
       "shortName": "Sepolia",
       "nativeSymbol": "SepoliaETH",
       "sdkConfig": null,
+      "relayNote": "On Sepolia, batches that write many new storage slots do not go through at the moment, and the full V3 LP permission set is one of them. BNB Chain testnet runs the whole flow.",
       "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
       "relayUrl": "https://testnet-relay.altana.network",
       "explorerUrl": "https://sepolia.etherscan.io",

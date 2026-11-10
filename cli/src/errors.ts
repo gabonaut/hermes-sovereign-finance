@@ -60,6 +60,12 @@ function ownError(e: any, depth = 0): CliError | null {
   return ownError(e.cause, depth + 1);
 }
 
+/** What to say when the relay takes a batch and then drops it. `note` is the network's own caveat, when it has one. */
+export function relayDropped(note?: string | null): string {
+  const base = "The relay dropped this batch without sending a transaction, so nothing was charged. The usual causes are a native cap or balance too low for the relay fee, or a batch that needs more gas than the relay allowed.";
+  return note ? `${base} ${note}` : base;
+}
+
 export function decodeFailure(e: unknown): DecodedFailure {
   const own = ownError(e);
   if (own) return { code: own.code, message: own.message, revert: null, relayCode: null, raw: own.message };
@@ -107,7 +113,7 @@ export function decodeFailure(e: unknown): DecodedFailure {
     message = EXPLAIN[revert] ?? `The wallet refused this batch (${revert}).`;
   } else if (relayCode === 300) {
     code = "RELAY_REJECTED";
-    message = "The relay rejected this batch before sending it. The usual cause is a native spend cap or balance too low to cover the relay fee.";
+    message = relayDropped();
   } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired/i.test(raw)) {
     code = "QUOTE_EXPIRED";
     message = "The approval took longer than the relay's fee quote lasts (30 seconds on mainnet). Nothing was sent. Start again and approve the passkey prompt promptly.";
