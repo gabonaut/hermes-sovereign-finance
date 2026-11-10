@@ -20187,8 +20187,14 @@ function collectText(e, depth = 0, out = []) {
   if (e.cause) collectText(e.cause, depth + 1, out);
   return out;
 }
+function ownError(e, depth = 0) {
+  if (!e || depth > 6) return null;
+  if (e instanceof CliError) return e;
+  return ownError(e.cause, depth + 1);
+}
 function decodeFailure(e) {
-  if (e instanceof CliError) return { code: e.code, message: e.message, revert: null, relayCode: null, raw: e.message };
+  const own2 = ownError(e);
+  if (own2) return { code: own2.code, message: own2.message, revert: null, relayCode: null, raw: own2.message };
   const parts = [...new Set(collectText(e))];
   const raw = parts.join(" | ").slice(0, 4e3);
   let revert = null;
@@ -47408,7 +47414,6 @@ async function activate(ctx, input2) {
           ctx.store.saveSession(chain.chainId, record2);
         }
         const sessionSigner = signerFromPrivateKey(secret);
-        leg.keystoreKeyUrl = keystoreKeyUrl(chain, record2.keyId);
         const before = await nativeBalance(chain, wallet.address);
         ctx.job.step(`Activating on ${chain.name}`);
         say(`Activate the agent's session on ${chain.name}. ${policy.scopeText.slice(4, 6).join(" ")} ${policy.scopeText.at(-1)}`);
@@ -47434,6 +47439,7 @@ async function activate(ctx, input2) {
         ctx.store.saveSession(chain.chainId, active);
         leg.status = "confirmed";
         leg.txUrl = session.transactionHash ? txUrl(chain, session.transactionHash) : null;
+        leg.keystoreKeyUrl = keystoreKeyUrl(chain, active.keyId);
         leg.charged = charged;
       } catch (e) {
         const f = decodeFailure(e);

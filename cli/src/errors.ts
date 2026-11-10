@@ -53,8 +53,16 @@ function collectText(e: any, depth = 0, out: string[] = []): string[] {
 export type DecodedFailure = { code: string; message: string; revert: string | null; relayCode: number | null; raw: string };
 
 /** Turn whatever the SDK, the relay or viem threw into a code, a plain sentence and the raw text. */
+/** The plugin's own error, if one sits anywhere in the cause chain (libraries wrap what they are handed). */
+function ownError(e: any, depth = 0): CliError | null {
+  if (!e || depth > 6) return null;
+  if (e instanceof CliError) return e;
+  return ownError(e.cause, depth + 1);
+}
+
 export function decodeFailure(e: unknown): DecodedFailure {
-  if (e instanceof CliError) return { code: e.code, message: e.message, revert: null, relayCode: null, raw: e.message };
+  const own = ownError(e);
+  if (own) return { code: own.code, message: own.message, revert: null, relayCode: null, raw: own.message };
   const parts = [...new Set(collectText(e))];
   const raw = parts.join(" | ").slice(0, 4000);
   let revert: string | null = null;

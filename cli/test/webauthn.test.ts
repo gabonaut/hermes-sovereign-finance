@@ -44,3 +44,11 @@ test("createFn and getFn round trip through the software authenticator", async (
   const p1363 = Buffer.concat([Buffer.from(sig.subarray(5, 37)), Buffer.from(sig.subarray(40))]);
   assert.ok(crypto.verify("sha256", signed, { key: publicKey, dsaEncoding: "ieee-p1363" }, p1363));
 });
+
+test("a plugin error wrapped by a library keeps its own code and message", async () => {
+  const { CliError, decodeFailure } = await import("../src/errors.ts");
+  const wrapped = new Error("Failed to request credential.", { cause: new CliError("PASSKEY_CANCELLED", "The passkey request was cancelled in the browser. Nothing was signed.") });
+  const f = decodeFailure(wrapped);
+  assert.equal(f.code, "PASSKEY_CANCELLED");
+  assert.match(f.message, /cancelled in the browser/);
+});

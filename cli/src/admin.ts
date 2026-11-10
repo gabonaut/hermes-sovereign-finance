@@ -221,7 +221,6 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
           ctx.store.saveSession(chain.chainId, record);
         }
         const sessionSigner = signerFromPrivateKey(secret);
-        leg.keystoreKeyUrl = keystoreKeyUrl(chain, record!.keyId);
 
         const before = await nativeBalance(chain, wallet.address);
         ctx.job.step(`Activating on ${chain.name}`);
@@ -237,6 +236,7 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
         ctx.store.saveSession(chain.chainId, active);
         leg.status = "confirmed";
         leg.txUrl = session.transactionHash ? txUrl(chain, session.transactionHash) : null;
+        leg.keystoreKeyUrl = keystoreKeyUrl(chain, active.keyId);
         leg.charged = charged;
       } catch (e) {
         const f = decodeFailure(e);
