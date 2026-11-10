@@ -48074,8 +48074,8 @@ function tokenId(text2) {
 function compile2(chain, wallet, actions, deadline) {
   if (!Array.isArray(actions) || actions.length === 0) throw new CliError("BAD_ACTION", "The batch is empty.");
   if (actions.length > MAX_ACTIONS) throw new CliError("BAD_ACTION", `At most ${MAX_ACTIONS} actions per batch.`);
-  const hasRaw = actions.some((a) => a?.type === "raw");
-  if (hasRaw && actions.some((a) => a?.type !== "raw")) throw new CliError("BAD_ACTION", "A raw call cannot share a batch with typed actions.");
+  const unscoped = (a) => a?.type === "raw" || a?.type === "transfer";
+  if (actions.some(unscoped) && !actions.every(unscoped)) throw new CliError("BAD_ACTION", "A transfer or raw call cannot share a batch with other actions.");
   const dex = chain.dex;
   const native = { decimals: 18, symbol: chain.nativeSymbol };
   const calls = [];
@@ -48160,6 +48160,18 @@ function compile2(chain, wallet, actions, deadline) {
       case "burn":
         calls.push({ to: dex.positionManager, data: encodeFunctionData({ abi: positionManagerAbi, functionName: "burn", args: [tokenId(a.tokenId)] }), value: 0n });
         break;
+      case "transfer": {
+        if (!isAddress(String(a.to))) throw new CliError("BAD_ACTION", "transfer.to is not an address.");
+        const to = getAddress(String(a.to));
+        const isNative = String(a.token ?? "").toLowerCase() === chain.nativeSymbol.toLowerCase() || String(a.token ?? "").toLowerCase() === "native";
+        if (isNative) {
+          calls.push({ to, data: "0x", value: units(a.amount, native, "transfer amount") });
+        } else {
+          const asset = requireAsset(chain, a.token);
+          calls.push({ to: asset.address, data: encodeFunctionData({ abi: erc20Abi2, functionName: "transfer", args: [to, units(a.amount, asset, "transfer amount")] }), value: 0n });
+        }
+        break;
+      }
       case "raw": {
         if (!isAddress(String(a.to))) throw new CliError("BAD_ACTION", "raw.to is not an address.");
         const data = a.data ?? "0x";
@@ -48175,7 +48187,7 @@ function compile2(chain, wallet, actions, deadline) {
         break;
       }
       default:
-        throw new CliError("BAD_ACTION", `Unknown action type "${a?.type}". Use wrap, unwrap, swap, mint, increase, decrease, collect, burn or raw.`);
+        throw new CliError("BAD_ACTION", `Unknown action type "${a?.type}". Use wrap, unwrap, swap, mint, increase, decrease, collect, burn, transfer or raw.`);
     }
   }
   return calls;
@@ -48291,7 +48303,7 @@ function describe3(chain, wallet, calls, opts) {
     if (inScope(call2.to, selector)) {
       violations.push(`A raw call targets ${call2.to} ${selector}, which the session covers. Use a typed action for it so recipients and approvals are checked.`);
     }
-    let what = `call ${call2.to} with selector ${selector}`;
+    let what = call2.data === "0x" ? `send ${amountText(call2.value, { decimals: 18, symbol: chain.nativeSymbol })} to ${call2.to}` : `call ${call2.to} with selector ${selector}`;
     if (asset && selector === SEL.transfer) {
       try {
         const { args } = decodeFunctionData({ abi: erc20Abi2, data: call2.data });
@@ -48301,10 +48313,10 @@ function describe3(chain, wallet, calls, opts) {
     } else if (asset) {
       what = `call ${asset.symbol} (${call2.to}) with selector ${selector}`;
     }
-    if (call2.value > 0n) what += `, sending ${amountText(call2.value, { decimals: 18, symbol: chain.nativeSymbol })}`;
+    if (call2.value > 0n && call2.data !== "0x") what += `, sending ${amountText(call2.value, { decimals: 18, symbol: chain.nativeSymbol })}`;
     parts.push(what);
   }
-  if (rawCount > 0 && rawCount !== calls.length) violations.push("A raw call cannot share a batch with typed actions.");
+  if (rawCount > 0 && rawCount !== calls.length) violations.push("A transfer or raw call cannot share a batch with other actions.");
   let kind = "other";
   let ruleKey = `sovereign:${chain.chainId}:once:${crypto5.randomBytes(6).toString("hex")}`;
   if (rawCount > 0) {

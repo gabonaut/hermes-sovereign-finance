@@ -21,6 +21,7 @@ export type Action =
   | { type: "decrease"; tokenId: string; token0: string; token1: string; liquidity: string; amount0Min?: string; amount1Min?: string }
   | { type: "collect"; tokenId: string }
   | { type: "burn"; tokenId: string }
+  | { type: "transfer"; token: string; to: string; amount: string }
   | { type: "raw"; to: string; data: string; value?: string };
 
 export type Call = { to: Address; data: Hex; value: bigint };
@@ -49,8 +50,9 @@ function tokenId(text: unknown): bigint {
 export function compile(chain: Chain, wallet: Address, actions: Action[], deadline: number): Call[] {
   if (!Array.isArray(actions) || actions.length === 0) throw new CliError("BAD_ACTION", "The batch is empty.");
   if (actions.length > MAX_ACTIONS) throw new CliError("BAD_ACTION", `At most ${MAX_ACTIONS} actions per batch.`);
-  const hasRaw = actions.some((a) => a?.type === "raw");
-  if (hasRaw && actions.some((a) => a?.type !== "raw")) throw new CliError("BAD_ACTION", "A raw call cannot share a batch with typed actions.");
+  // Transfers and raw calls are outside the V3 LP scope, so they never share a batch with scoped actions.
+  const unscoped = (a: Action) => a?.type === "raw" || a?.type === "transfer";
+  if (actions.some(unscoped) && !actions.every(unscoped)) throw new CliError("BAD_ACTION", "A transfer or raw call cannot share a batch with other actions.");
 
   const dex = chain.dex;
   const native = { decimals: 18, symbol: chain.nativeSymbol };
@@ -141,6 +143,18 @@ export function compile(chain: Chain, wallet: Address, actions: Action[], deadli
       case "burn":
         calls.push({ to: dex.positionManager, data: encodeFunctionData({ abi: positionManagerAbi, functionName: "burn", args: [tokenId(a.tokenId)] }), value: 0n });
         break;
+      case "transfer": {
+        if (!isAddress(String(a.to))) throw new CliError("BAD_ACTION", "transfer.to is not an address.");
+        const to = getAddress(String(a.to));
+        const isNative = String(a.token ?? "").toLowerCase() === chain.nativeSymbol.toLowerCase() || String(a.token ?? "").toLowerCase() === "native";
+        if (isNative) {
+          calls.push({ to, data: "0x", value: units(a.amount, native, "transfer amount") });
+        } else {
+          const asset = requireAsset(chain, a.token);
+          calls.push({ to: asset.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, units(a.amount, asset, "transfer amount")] }), value: 0n });
+        }
+        break;
+      }
       case "raw": {
         if (!isAddress(String(a.to))) throw new CliError("BAD_ACTION", "raw.to is not an address.");
         const data = (a.data ?? "0x") as Hex;
@@ -156,7 +170,7 @@ export function compile(chain: Chain, wallet: Address, actions: Action[], deadli
         break;
       }
       default:
-        throw new CliError("BAD_ACTION", `Unknown action type "${(a as any)?.type}". Use wrap, unwrap, swap, mint, increase, decrease, collect, burn or raw.`);
+        throw new CliError("BAD_ACTION", `Unknown action type "${(a as any)?.type}". Use wrap, unwrap, swap, mint, increase, decrease, collect, burn, transfer or raw.`);
     }
   }
   return calls;
@@ -294,7 +308,7 @@ export function describe(chain: Chain, wallet: Address, calls: Call[], opts: { s
     if (inScope(call.to, selector)) {
       violations.push(`A raw call targets ${call.to} ${selector}, which the session covers. Use a typed action for it so recipients and approvals are checked.`);
     }
-    let what = `call ${call.to} with selector ${selector}`;
+    let what = call.data === "0x" ? `send ${amountText(call.value, { decimals: 18, symbol: chain.nativeSymbol })} to ${call.to}` : `call ${call.to} with selector ${selector}`;
     if (asset && selector === SEL.transfer) {
       try {
         const { args } = decodeFunctionData({ abi: erc20Abi, data: call.data });
@@ -305,11 +319,11 @@ export function describe(chain: Chain, wallet: Address, calls: Call[], opts: { s
     } else if (asset) {
       what = `call ${asset.symbol} (${call.to}) with selector ${selector}`;
     }
-    if (call.value > 0n) what += `, sending ${amountText(call.value, { decimals: 18, symbol: chain.nativeSymbol })}`;
+    if (call.value > 0n && call.data !== "0x") what += `, sending ${amountText(call.value, { decimals: 18, symbol: chain.nativeSymbol })}`;
     parts.push(what);
   }
 
-  if (rawCount > 0 && rawCount !== calls.length) violations.push("A raw call cannot share a batch with typed actions.");
+  if (rawCount > 0 && rawCount !== calls.length) violations.push("A transfer or raw call cannot share a batch with other actions.");
 
   // Classify the batch. Only a batch that provably stays inside one pool gets a reusable key.
   let kind: Description["kind"] = "other";

@@ -92,6 +92,7 @@ test("bad actions are refused before anything is encoded", () => {
   assert.throws(() => compile(chain, wallet, [{ ...(enter[2] as any), tickLower: -60005 }], 1), /multiples of 10/);
   assert.throws(() => compile(chain, wallet, [{ ...(enter[2] as any), token0: t1.symbol, token1: t0.symbol }], 1), /lower address/);
   assert.throws(() => compile(chain, wallet, [enter[0], { type: "raw", to: usdt.address, data: "0x" }], 1), /cannot share a batch/);
+  assert.throws(() => compile(chain, wallet, [enter[0], { type: "transfer", token: "USDT", to: other, amount: "1" }], 1), /cannot share a batch/);
 });
 
 test("Uniswap batches use the SwapRouter02 struct", () => {
@@ -102,4 +103,17 @@ test("Uniswap batches use the SwapRouter02 struct", () => {
   const d = describe(sep, wallet, calls, { scope: sepScope, keyId8: "abcd1234", positions: {} });
   assert.deepEqual(d.violations, []);
   assert.match(d.sentence, /swap 0\.01 WETH for at least 1 USDC on Uniswap V3 \(0\.05% pool\)/);
+});
+
+test("a transfer action encodes a plain token or native send, which the V3 LP scope does not cover", () => {
+  const token = compile(chain, wallet, [{ type: "transfer", token: "USDT", to: other, amount: "5" }], 1);
+  assert.equal(token[0].to, usdt.address);
+  assert.equal(token[0].data.slice(0, 10), SEL.transfer);
+  const d = describe(chain, wallet, token, opts);
+  assert.equal(d.kind, "raw");
+  assert.deepEqual(d.violations, []);
+  assert.match(d.sentence, /transfer 5 USDT to 0x2222222222222222222222222222222222222222\. The session does not cover this call/);
+  const coin = compile(chain, wallet, [{ type: "transfer", token: "tBNB", to: other, amount: "0.01" }], 1);
+  assert.deepEqual(coin, [{ to: other, data: "0x", value: 10n ** 16n }]);
+  assert.match(describe(chain, wallet, coin, opts).sentence, /send 0\.01 tBNB to 0x2222222222222222222222222222222222222222/);
 });

@@ -56,8 +56,9 @@ SCHEMAS = [
         "description": ("Send one batch of actions from the wallet with the agent's session key. Action types: wrap, unwrap, swap, mint, "
                         "increase, decrease, collect, burn. The plugin encodes them, adds exact approvals in the same batch and makes the wallet "
                         "the recipient of everything. Get the actions from sovereign_quote rather than writing them by hand. The user is asked to "
-                        "approve each batch. A raw action {type: raw, to, data, value} exists only for calls outside the session scope, which the "
-                        "wallet refuses onchain. If the wallet refuses a batch, report the refusal and do not look for another route."),
+                        "approve each batch. Two more action types reach outside the V3 LP scope: {type: transfer, token, to, amount} sends a token "
+                        "or the native coin to an address, and {type: raw, to, data, value} sends any call. The wallet refuses both onchain unless "
+                        "the session was granted them. If the wallet refuses a batch, report the refusal and do not look for another route."),
         "parameters": {
             "type": "object",
             "properties": {
