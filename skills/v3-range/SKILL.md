@@ -351,8 +351,9 @@ decimal strings in token units, such as `"100"` or `"0.25"`. Tokens are symbols.
   from the position) and optional minimums, exactly as the `exit-plan` quote returns it.
 - Each `sovereign_execute` call asks the user to approve a sentence built from the
   encoded batch. "Always" covers later batches for the same pool on that network.
-- A `raw` action `{to, data, value}` exists only for calls outside the session scope. No
-  play uses it.
+- Two more actions reach outside this scope: `transfer` `{token, to, amount}` and `raw`
+  `{to, data, value}`. The wallet refuses both onchain under the V3 LP session. No play
+  uses them.
 - `sovereign_quote({network, kind: "swap", tokenIn, tokenOut, fee, amountIn})` returns
   `amountOut` and `minAmountOut` for one swap. An `lp-plan` already contains the swap it
   needs.
