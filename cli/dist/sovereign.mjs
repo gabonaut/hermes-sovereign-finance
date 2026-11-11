@@ -48202,6 +48202,16 @@ async function lpPlan(chain, wallet, input2) {
   const liquidity = liquidityForAmounts(sqrtForMint, lo, hi, h0, h1);
   if (liquidity === 0n) throw new CliError("BAD_INPUT", "The budget is too small to mint any liquidity in this range.");
   const [u0, u1] = amountsForLiquidity(sqrtForMint, lo, hi, liquidity);
+  const shifted = (up) => {
+    const factor = Math.sqrt(1 + (up ? 1 : -1) * Number(slippage) / 1e4);
+    const sqrtAt = sqrtForMint * BigInt(Math.round(factor * 1e9)) / 1000000000n;
+    return amountsForLiquidity(sqrtAt, lo, hi, liquidityForAmounts(sqrtAt, lo, hi, h0, h1));
+  };
+  const [up0, up1] = shifted(true);
+  const [down0, down1] = shifted(false);
+  const least = (...xs) => xs.reduce((a, b) => b < a ? b : a);
+  const min0 = less(least(u0, up0, down0), 30n);
+  const min1 = less(least(u1, up1, down1), 30n);
   actions.push({
     type: "mint",
     token0: t0.symbol,
@@ -48211,8 +48221,8 @@ async function lpPlan(chain, wallet, input2) {
     tickUpper: hi,
     amount0Desired: text(h0, t0),
     amount1Desired: text(h1, t1),
-    amount0Min: text(less(u0, slippage), t0),
-    amount1Min: text(less(u1, slippage), t1)
+    amount0Min: text(min0, t0),
+    amount1Min: text(min1, t1)
   });
   const { invert: invert2, unit } = orient(t0, t1);
   const pLo = priceFromTick(lo, t0.decimals, t1.decimals);
@@ -48674,13 +48684,18 @@ function describe3(chain, wallet, calls, opts) {
     kind = "swap";
     ruleKey = `sovereign:${chain.chainId}:${opts.keyId8}:swap:${swaps[0].tin.symbol}:${swaps[0].tout.symbol}`;
   }
-  let sentence = `On ${chain.name}, from wallet ${short(wallet)}: ${parts.join("; ")}.`;
-  if (approvals.length) sentence += ` Exact approvals in this batch: ${approvals.join(", ")}. The wallet clears them when the batch ends.`;
-  if (kind === "raw") sentence += " The session does not cover this call, so the wallet's onchain policy is expected to refuse it.";
-  else sentence += " Everything this batch produces stays in the wallet.";
-  if (opts.sessionStatus === "revoked") sentence += " This session was revoked, so the wallet is expected to refuse the batch.";
-  if (kind === "lp") sentence += ` Always lets the agent run future batches for this pool on ${chain.name} without asking, within the onchain caps, until this session is revoked or replaced.`;
-  if (kind === "swap") sentence += ` Always lets the agent repeat this swap direction on ${chain.name} without asking, within the onchain caps, until this session is revoked or replaced.`;
+  const step = (text2) => `  ${parts.length > 1 ? "- " : ""}${text2.charAt(0).toUpperCase()}${text2.slice(1)}`;
+  let sentence = `On ${chain.name}, from wallet ${short(wallet)}:
+${parts.map(step).join("\n")}`;
+  if (approvals.length) sentence += `
+Exact approvals in this batch: ${approvals.join(", ")}. The wallet clears them when the batch ends.`;
+  if (kind === "raw") sentence += "\nThe session does not cover this call, so the wallet's onchain policy is expected to refuse it.";
+  else sentence += "\nEverything this batch produces stays in the wallet.";
+  if (opts.sessionStatus === "revoked") sentence += "\nThis session was revoked, so the wallet is expected to refuse the batch.";
+  if (kind === "lp") sentence += `
+Always lets the agent run future batches for this pool on ${chain.name} without asking, within the onchain caps, until this session is revoked or replaced.`;
+  if (kind === "swap") sentence += `
+Always lets the agent repeat this swap direction on ${chain.name} without asking, within the onchain caps, until this session is revoked or replaced.`;
   return { sentence, ruleKey, kind, violations, parts };
 }
 
