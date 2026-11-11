@@ -93,3 +93,11 @@ test("the passkey page serves one request at a time to a browser on localhost on
   await closing;
   await assert.rejects(fetch(state.passkeyUrl));
 });
+
+test("the passkey page's script parses", async () => {
+  const { page } = await import("../src/bridge.ts");
+  const html = page("n");
+  const script = /<script[^>]*>([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
+  assert.ok(script.length > 500);
+  assert.doesNotThrow(() => new Function(script));
+});
