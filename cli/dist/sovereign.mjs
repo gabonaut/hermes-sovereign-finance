@@ -20218,6 +20218,18 @@ function decodeFailure(e) {
   if (own2) return { code: own2.code, message: own2.message, revert: null, relayCode: null, raw: own2.message };
   const parts = [...new Set(collectText(e))];
   const raw = parts.join(" | ").slice(0, 4e3);
+  const short2 = /"feeTokenDeficit":"(0x[0-9a-fA-F]+)"/.exec(raw);
+  if (short2 && BigInt(short2[1]) > 0n) {
+    const need = /"required":"(0x[0-9a-fA-F]+)"/.exec(raw);
+    const eth = (hex4) => (Number(BigInt(hex4) / 10n ** 9n) / 1e9).toFixed(6);
+    return {
+      code: "INSUFFICIENT_FUNDS",
+      message: `Nothing was sent: the wallet is short by about ${eth(short2[1])} of the native coin for this amount plus the network fee${need ? ` (it needs ${eth(need[1])} in total)` : ""}. The fee moved since the amount was worked out. Send a little less, or use Max again.`,
+      revert: null,
+      relayCode: null,
+      raw
+    };
+  }
   const reason = revertText(raw);
   if (reason) {
     const why = REASONS[reason] ?? `a contract in the batch reverted with "${reason}"`;
@@ -20267,7 +20279,7 @@ function decodeFailure(e) {
     message = relayDropped();
   } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired|Invalid parameters were provided to the RPC method/i.test(raw)) {
     code2 = "QUOTE_EXPIRED";
-    message = "The relay did not accept the signed request, and nothing was sent. This happens when the approval takes longer than the relay's fee quote lasts, which is 30 seconds on mainnet. Start again and approve the passkey prompt straight away.";
+    message = "The relay did not accept the signed request, and nothing was sent. The usual cause on mainnet is an approval that took longer than the 30 seconds the fee quote lasts. Start again and approve the passkey prompt straight away.";
   } else if (/insufficient|not enough/i.test(raw)) {
     code2 = "INSUFFICIENT_FUNDS";
   }
@@ -20308,7 +20320,7 @@ h1 svg{vertical-align:-4px;margin-right:8px}
     <button id="cancel" type="button">Cancel</button>
   </div>
   <p id="status" role="status"></p>
-  <p id="origin">This page is served by the Sovereign Finance plugin on your own computer. Your passkey signs here and never leaves your device.</p>
+  <p id="origin">This page is served by the Sovereign Finance plugin on your own computer.<br>Your passkey signs here and never leaves your device.</p>
 </main>
 <script nonce="${nonce}">
 (function () {
@@ -47460,7 +47472,7 @@ async function withdrawReserve(chain, wallet) {
   const [fee, keys, gasPrice, buffer2] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), rpc(chain).getGasPrice(), relayGasBuffer(chain)]);
   const first = keys.length === 0;
   const gas = 600000n + (first ? 550000n : 0n) + buffer2 + (chain.storageBudget ? (first ? 16n : 2n) * BUDGET_SLOT_GAS : 0n);
-  const price = gasPrice * 2n > 100000000n ? gasPrice * 2n : 100000000n;
+  const price = gasPrice * 3n > 100000000n ? gasPrice * 3n : 100000000n;
   return gas * price + (first ? fee : 0n);
 }
 async function costOf(chain, wallet, permissions) {
