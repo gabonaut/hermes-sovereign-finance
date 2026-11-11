@@ -1,15 +1,15 @@
 // Admin commands. Every one of them is signed by the wallet's passkey, never by a key on disk.
 import crypto from "node:crypto";
 import { encodeFunctionData, formatUnits, getAddress, keccak256, parseUnits, type Address, type Hex } from "viem";
-import { generatePrivateKey } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAddress } from "viem/accounts";
 import { serializeSession, signerFromPasskey, signerFromPrivateKey, type SessionPermissions } from "@altananetwork/sdk";
 import { erc20Abi } from "./abi.ts";
 import { altanaClient, chainFor, chainsFor, findAsset, isNetworkKey, keystoreKeyUrl, rpc, txUrl, type Chain, type Mode, type NetworkKey } from "./config.ts";
 import { activationSlots, planStages } from "./budget.ts";
-import { balances, keystoreKeys, nativeBalance, registrationFee, relayGasBuffer, relayServes } from "./chainread.ts";
+import { balances, grantedPairs, isValidKey, keystoreKeys, nativeBalance, registrationFee, relayGasBuffer, relayServes } from "./chainread.ts";
 import { CliError, decodeFailure, relayDropped } from "./errors.ts";
 import type { JobReporter } from "./job.ts";
-import { compilePolicy, type GrantInput } from "./policy.ts";
+import { compilePolicy, pair, type GrantInput } from "./policy.ts";
 import type { SessionRecord, Store, WalletRecord } from "./store.ts";
 import { RP_ID, webAuthnFns, type WebAuthnTransport } from "./webauthn.ts";
 
@@ -23,6 +23,8 @@ export type AdminCtx = {
 };
 
 const DRAFT_MAX_AGE_MS = 24 * 3600 * 1000;
+/** How long activation keeps watching the chain for a transaction the relay has submitted. */
+const PENDING_WAIT_MS = 12 * 60 * 1000;
 
 function requireWallet(ctx: AdminCtx): WalletRecord {
   const w = ctx.store.wallet(ctx.mode);
@@ -298,6 +300,22 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
           ctx.job.step(many ? `Activating on ${chain.name}, step ${i + 1} of ${stages.length}` : `Activating on ${chain.name}`);
           say(`Activate the agent's session on ${chain.name}. ${policy.scopeText.slice(4, 6).join(" ")} ${policy.scopeText.at(-1)}${many ? ` Approval ${i + 1} of ${stages.length} on this network.` : ""}`);
           try {
+            // A stage counts as landed when the chain shows it: the Keystore entry for the stage that
+            // registers the key, the stage's call permissions otherwise.
+            const sessionAddress = privateKeyToAddress(secret);
+            const keyId = record!.keyId;
+            const landed = async () => {
+              if (stage.register) return isValidKey(chain, wallet.address, keyId).catch(() => false);
+              const have = await grantedPairs(chain, wallet.address, sessionAddress).catch(() => null);
+              return have !== null && stage.calls.every((c) => have.has(pair(c.to, c.signature)));
+            };
+            // A grant sent earlier may have confirmed after this plugin stopped waiting. Then nothing is signed again.
+            if (await landed()) {
+              ctx.log(`activate ${chain.name}: step ${i + 1} is already onchain`);
+              record = { ...record!, stagesDone: i + 1, grantTxs: hashes };
+              ctx.store.saveSession(chain.chainId, record);
+              continue;
+            }
             const grant = () => client.grantSession({
               wallet: { address: wallet.address }, signer, permissions: { calls: stage.calls, spend: stage.spend }, expiry: draft.expiry, sessionSigner, register: stage.register, chainId: chain.chainId,
             });
@@ -305,15 +323,30 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
             try {
               granted = await grant();
             } catch (e) {
-              // A quote that ran out before the approval arrived gets one more prompt, with a fresh quote.
-              if (decodeFailure(e).code !== "QUOTE_EXPIRED") throw e;
-              ctx.log(`activate ${chain.name}: the quote ran out, asking again`);
-              say(`The fee quote ran out before your approval arrived, so nothing was sent. Approve again for ${chain.name}.`);
-              granted = await grant();
+              if (/status=PENDING/.test(String((e as Error)?.message ?? e))) {
+                // Submitted, not yet confirmed. A busy network can take longer than the SDK waits, so keep watching the chain.
+                ctx.job.step(`Waiting for ${chain.name} to confirm. The transaction is submitted, and this can take several minutes`);
+                const until = Date.now() + PENDING_WAIT_MS;
+                let seen = false;
+                while (!seen && Date.now() < until) {
+                  await new Promise((r) => setTimeout(r, 8000));
+                  seen = await landed();
+                }
+                if (!seen) {
+                  throw new CliError("STILL_PENDING", `The transaction was submitted, but ${chain.name} has not confirmed it yet. Nothing was charged so far. Activate again in a few minutes: the plugin checks the chain first and does not ask you to sign twice for a transaction that went through.`);
+                }
+                granted = { transactionHash: undefined } as any;
+              } else {
+                // A quote that ran out before the approval arrived gets one more prompt, with a fresh quote.
+                if (decodeFailure(e).code !== "QUOTE_EXPIRED") throw e;
+                ctx.log(`activate ${chain.name}: the quote ran out, asking again`);
+                say(`The fee quote ran out before your approval arrived, so nothing was sent. Approve again for ${chain.name}.`);
+                granted = await grant();
+              }
             }
             if (granted.transactionHash) hashes.push(granted.transactionHash);
           } catch (e) {
-            if (!many) throw e;
+            if (!many || (e instanceof CliError && e.code === "STILL_PENDING")) throw e;
             const f = decodeFailure(e);
             ctx.log(`activate ${chain.name} step ${i + 1} failed: ${f.raw}`);
             const why = f.code === "RELAY_REJECTED" ? relayDropped(chain.relayNote) : f.message;
