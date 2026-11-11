@@ -1,6 +1,6 @@
 # Sovereign Finance
 
-A Hermes plugin that gives your agent an [Altana](https://altana.network) smart wallet on BNB Chain and Ethereum.
+A Hermes plugin that gives your agent a Smart Agentic Wallet, powered by [Altana](https://altana.network), on BNB Chain and Ethereum.
 
 You hold the admin key, and it is a passkey. It stays on your device, and every admin action needs your fingerprint. The agent holds a session key. The wallet contract limits that key to the contracts, functions and daily amounts you approved, until the date you set, and you can revoke it whenever you like.
 
