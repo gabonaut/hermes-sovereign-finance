@@ -59,3 +59,23 @@ export const AltanaMark = ({ size = 16 }: { size?: number }) => (
     <path d="M163.617 56.7248C194.858 25.4828 245.512 25.4828 276.754 56.7248L361.96 141.931L220.066 283.825L78.2908 142.051L163.617 56.7248Z" fill="#3665E4" />
   </svg>
 )
+
+/** Network marks, in each network's own colour. Testnets use their mainnet's mark. */
+export const NetworkMark = ({ network, size = 14 }: { network: string; size?: number }) =>
+  network === 'bnb' ? (
+    <svg aria-hidden="true" focusable="false" height={size} viewBox="0 0 126.61 126.61" width={size}>
+      <path
+        d="M38.73 53.2l24.59-24.58 24.6 24.6 14.3-14.31L63.32 0 24.42 38.9zM0 63.31l14.3-14.31 14.31 14.31-14.31 14.3zM38.73 73.41l24.59 24.59 24.6-24.6 14.31 14.29-38.9 38.91-38.91-38.88zM98 63.31l14.3-14.31 14.31 14.3-14.31 14.32zM77.83 63.3L63.32 48.78 52.59 59.51l-1.24 1.23-2.54 2.54 14.51 14.5 14.51-14.47z"
+        fill="#F3BA2F"
+      />
+    </svg>
+  ) : (
+    <svg aria-hidden="true" focusable="false" height={size} viewBox="0 0 256 417" width={Math.round((size * 256) / 417)}>
+      <path d="M127.96 0l-2.8 9.5v275.67l2.8 2.79 127.96-75.64z" fill="#627EEA" fillOpacity=".75" />
+      <path d="M127.96 0L0 212.32l127.96 75.64V154.16z" fill="#627EEA" fillOpacity=".5" />
+      <path d="M127.96 312.19l-1.57 1.92v98.2l1.57 4.6L256 236.59z" fill="#627EEA" fillOpacity=".75" />
+      <path d="M127.96 416.91V312.19L0 236.59z" fill="#627EEA" fillOpacity=".5" />
+      <path d="M127.96 287.96l127.96-75.64-127.96-58.16z" fill="#627EEA" />
+      <path d="M0 212.32l127.96 75.64V154.16z" fill="#627EEA" fillOpacity=".8" />
+    </svg>
+  )

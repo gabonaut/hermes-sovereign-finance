@@ -61,7 +61,7 @@ export function Plays({ network, stage }: { network: NetworkState; stage: 'start
   return (
     <section className="sf-plays" data-stage={stage}>
       <div className="sf-plays-head">
-        <span className="sf-strong">{stage === 'start' ? 'Next: put the agent to work' : 'Ask the agent'}</span>
+        <h4 className="sf-section">{stage === 'start' ? 'Next: put the agent to work' : 'Ask the agent'}</h4>
         <span className="sf-hint">A button writes the request into the chat box. You send it.</span>
       </div>
       <ul className="sf-play-list">
