@@ -2,6 +2,7 @@
 // empty instead of throwing during render.
 
 import type {
+  OtherWallet,
   ActivateLeg,
   Amount,
   Balances,
@@ -238,6 +239,13 @@ export function normalizeState(v: unknown): WalletState | null {
       .filter((n): n is NetworkState => n !== null),
     job: job(d.job),
     preset: preset(d.preset),
-    draft: normalizeDraft(d.draft)
+    draft: normalizeDraft(d.draft),
+    otherWallets: list(d.otherWallets)
+      .map(w => {
+        const o = dict(w)
+        const a = o ? text(o.address).trim() : ''
+        return a ? { address: a, setAsideAt: o && typeof o.setAsideAt === 'string' ? o.setAsideAt : null } : null
+      })
+      .filter((w): w is OtherWallet => w !== null)
   }
 }

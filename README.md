@@ -47,6 +47,8 @@ After that the pane shows, per network, the session's scope and expiry, open pos
 
 Testnet mode (BNB testnet and Sepolia) is the default. Mainnet mode uses a separate wallet with its own passkey.
 
+One wallet is in use per mode. "Use another wallet" in step 1 sets the current one aside and lets you create or recover another. A wallet set aside keeps its funds, its positions and any session you have not revoked, and its records stay on disk. Pick it under Earlier wallets, or use Recover from passkey, to return to it.
+
 Sepolia limits how much new storage one transaction can write to the wallet, so activation takes three passkey approvals there instead of one, plus one more the first time, which sets the wallet up on Sepolia. The pane shows the count before you confirm. Everything else works the same on both testnets.
 
 ## What the agent gets
@@ -80,6 +82,7 @@ The bundled skill `sovereign-finance:v3-range` teaches the agent the plays: list
 - Hermes YOLO mode, `approvals.mode: off` and `approvals.cron_mode: approve` skip the approval prompt. The onchain limits still apply.
 - If you lose every copy of the passkey, nobody can revoke or withdraw. The session still ends on its expiry date.
 - The wallet's networks are fixed when it is created.
+- Setting a wallet aside changes which wallet the plugin uses. It does not revoke that wallet's session.
 - Revoke removes the agent's key and nothing else. An open position stays in the wallet. To exit, have the agent close it first, then withdraw, then revoke.
 - Every transaction goes through the Altana relay, including a withdrawal signed by your passkey. Funds on a network wait for the relay to deliver there.
 - The passkey page is on localhost, and the passkey is bound to that name. Approve only a prompt you started from the pane.
@@ -107,7 +110,7 @@ Cron runs unattended, so Hermes blocks anything you have not approved in advance
 
 - **Network.** The plugin talks to the Altana relay (`relay.altana.network`, `testnet-relay.altana.network`), public RPC endpoints on `publicnode.com`, the DexScreener API for the mainnet pool list, and `skills.altana.network` when the agent asks for a registry skill. No telemetry.
 - **Processes.** Each command starts the bundled Node CLI with Hermes's Node, or the `node` on your PATH. During a wallet admin action the CLI serves one page on `localhost`, on a random port and path, for the passkey prompt, and exits when the action ends.
-- **Stored on disk.** `~/.hermes/plugin-data/sovereign-finance/`, mode 0700: the session keys in plain files (mode 0600, because cron signs unattended), the passkey's public handle, session scopes and caches. The admin key is never on disk.
+- **Stored on disk.** `~/.hermes/plugin-data/sovereign-finance/`, mode 0700: the session keys in plain files (mode 0600, because cron signs unattended), the passkey's public handle, session scopes, caches, and the same records for wallets set aside. The admin key is never on disk.
 - **Hooks.** A `pre_tool_call` hook reads the arguments of every tool call. It blocks calls that name the plugin's key files, CLI or admin routes, and it turns `sovereign_execute` into an approval prompt.
 - **Backend routes.** `dashboard/plugin_api.py` answers only the local Hermes Desktop app.
 - **Bundled code.** `cli/dist/sovereign.mjs` and `desktop/plugin.js` are built from `cli/` and `pane/`. `scripts/verify-build.sh` rebuilds both from the lockfiles and fails on any difference.
