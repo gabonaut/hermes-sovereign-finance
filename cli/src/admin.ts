@@ -38,7 +38,9 @@ async function withPasskey<T>(ctx: AdminCtx, fn: (fns: ReturnType<typeof webAuth
   try {
     // Signing actions wait for the user first, so the relay's short-lived quote is not spent on opening a tab.
     if (intro && transport.ready) await transport.ready(intro);
-    const out = await fn(webAuthnFns(transport, () => prompt), (p) => (prompt = p));
+    // The mainnet relay's fee quote lasts 30 seconds, counted from when the passkey prompt appears.
+    const hurry = ctx.mode === "mainnet" ? " Approve within 30 seconds." : "";
+    const out = await fn(webAuthnFns(transport, () => prompt), (p) => (prompt = p + hurry));
     ok = true;
     return out;
   } finally {
@@ -296,9 +298,19 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
           ctx.job.step(many ? `Activating on ${chain.name}, step ${i + 1} of ${stages.length}` : `Activating on ${chain.name}`);
           say(`Activate the agent's session on ${chain.name}. ${policy.scopeText.slice(4, 6).join(" ")} ${policy.scopeText.at(-1)}${many ? ` Approval ${i + 1} of ${stages.length} on this network.` : ""}`);
           try {
-            const granted = await client.grantSession({
+            const grant = () => client.grantSession({
               wallet: { address: wallet.address }, signer, permissions: { calls: stage.calls, spend: stage.spend }, expiry: draft.expiry, sessionSigner, register: stage.register, chainId: chain.chainId,
             });
+            let granted;
+            try {
+              granted = await grant();
+            } catch (e) {
+              // A quote that ran out before the approval arrived gets one more prompt, with a fresh quote.
+              if (decodeFailure(e).code !== "QUOTE_EXPIRED") throw e;
+              ctx.log(`activate ${chain.name}: the quote ran out, asking again`);
+              say(`The fee quote ran out before your approval arrived, so nothing was sent. Approve again for ${chain.name}.`);
+              granted = await grant();
+            }
             if (granted.transactionHash) hashes.push(granted.transactionHash);
           } catch (e) {
             if (!many) throw e;

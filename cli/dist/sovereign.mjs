@@ -20265,9 +20265,9 @@ function decodeFailure(e) {
   } else if (relayCode === 300) {
     code2 = "RELAY_REJECTED";
     message = relayDropped();
-  } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired/i.test(raw)) {
+  } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired|Invalid parameters were provided to the RPC method/i.test(raw)) {
     code2 = "QUOTE_EXPIRED";
-    message = "The approval took longer than the relay's fee quote lasts (30 seconds on mainnet). Nothing was sent. Start again and approve the passkey prompt promptly.";
+    message = "The relay did not accept the signed request, and nothing was sent. This happens when the approval takes longer than the relay's fee quote lasts, which is 30 seconds on mainnet. Start again and approve the passkey prompt straight away.";
   } else if (/insufficient|not enough/i.test(raw)) {
     code2 = "INSUFFICIENT_FUNDS";
   }
@@ -20289,7 +20289,7 @@ function page(nonce) {
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: Canvas; color: CanvasText; }
   main { width: min(34rem, calc(100vw - 3rem)); padding: 2rem 0; }
   h1 { font-size: 1rem; font-weight: 600; margin: 0 0 1.5rem; opacity: .7; }
-  #prompt { font-size: 1.25rem; line-height: 1.4; margin: 0 0 1.5rem; overflow-wrap: anywhere; }
+  #prompt { font-size: 1.15rem; line-height: 1.5; margin: 0 0 1.5rem; overflow-wrap: anywhere; white-space: pre-line; }
   button { font: inherit; font-weight: 600; padding: .7rem 1.2rem; border-radius: .5rem; border: 1px solid transparent; cursor: pointer; }
   #approve { background: CanvasText; color: Canvas; }
   #cancel { background: transparent; color: inherit; border-color: color-mix(in srgb, CanvasText 30%, transparent); margin-left: .5rem; }
@@ -20346,7 +20346,9 @@ h1 svg{vertical-align:-4px;margin-right:8px}
         if (r.idle) return poll();
         current = r;
         seq = r.seq;
-        promptEl.textContent = r.prompt;
+        // One statement per line.
+        promptEl.textContent = String(r.prompt).replace(/. (?=[A-Z])/g, ".
+");
         approveBtn.textContent = r.kind === "ready" ? "Continue" : "Approve with passkey";
         buttons.hidden = false;
         approveBtn.disabled = false;
@@ -47360,7 +47362,8 @@ async function withPasskey(ctx, fn, intro) {
   let ok = false;
   try {
     if (intro && transport.ready) await transport.ready(intro);
-    const out = await fn(webAuthnFns(transport, () => prompt), (p) => prompt = p);
+    const hurry = ctx.mode === "mainnet" ? " Approve within 30 seconds." : "";
+    const out = await fn(webAuthnFns(transport, () => prompt), (p) => prompt = p + hurry);
     ok = true;
     return out;
   } finally {
@@ -47586,7 +47589,7 @@ async function activate(ctx, input2) {
           ctx.job.step(many ? `Activating on ${chain.name}, step ${i + 1} of ${stages.length}` : `Activating on ${chain.name}`);
           say(`Activate the agent's session on ${chain.name}. ${policy.scopeText.slice(4, 6).join(" ")} ${policy.scopeText.at(-1)}${many ? ` Approval ${i + 1} of ${stages.length} on this network.` : ""}`);
           try {
-            const granted = await client.grantSession({
+            const grant = () => client.grantSession({
               wallet: { address: wallet.address },
               signer,
               permissions: { calls: stage.calls, spend: stage.spend },
@@ -47595,6 +47598,15 @@ async function activate(ctx, input2) {
               register: stage.register,
               chainId: chain.chainId
             });
+            let granted;
+            try {
+              granted = await grant();
+            } catch (e) {
+              if (decodeFailure(e).code !== "QUOTE_EXPIRED") throw e;
+              ctx.log(`activate ${chain.name}: the quote ran out, asking again`);
+              say(`The fee quote ran out before your approval arrived, so nothing was sent. Approve again for ${chain.name}.`);
+              granted = await grant();
+            }
             if (granted.transactionHash) hashes.push(granted.transactionHash);
           } catch (e) {
             if (!many) throw e;
