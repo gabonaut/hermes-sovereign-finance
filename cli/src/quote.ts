@@ -360,7 +360,16 @@ export async function exitPlan(chain: Chain, wallet: Address, input: { tokenId: 
   if ((liquidity as bigint) > 0n) {
     const state = await poolState(chain, poolAddress(chain, t0.address, t1.address, Number(fee)));
     const [a0, a1] = amountsForLiquidity(state.sqrtPriceX96, Number(tickLower), Number(tickUpper), liquidity as bigint);
-    actions.push({ type: "decrease", tokenId: id.toString(), token0: t0.symbol, token1: t1.symbol, liquidity: (liquidity as bigint).toString(), amount0Min: text(less(a0, slippage), t0), amount1Min: text(less(a1, slippage), t1) });
+    // As with a mint, the minimums are what the position would pay out if the price moved by the
+    // slippage either way before the batch lands.
+    const at = (up: boolean) => {
+      const factor = Math.sqrt(1 + (up ? 1 : -1) * Number(slippage) / 10_000);
+      return amountsForLiquidity((state.sqrtPriceX96 * BigInt(Math.round(factor * 1e9))) / 1_000_000_000n, Number(tickLower), Number(tickUpper), liquidity as bigint);
+    };
+    const [up0, up1] = at(true);
+    const [down0, down1] = at(false);
+    const least = (...xs: bigint[]) => xs.reduce((x, y) => (y < x ? y : x));
+    actions.push({ type: "decrease", tokenId: id.toString(), token0: t0.symbol, token1: t1.symbol, liquidity: (liquidity as bigint).toString(), amount0Min: text(less(least(a0, up0, down0), 30n), t0), amount1Min: text(less(least(a1, up1, down1), 30n), t1) });
   }
   actions.push({ type: "collect", tokenId: id.toString() }, { type: "burn", tokenId: id.toString() });
   return { tokenId: id.toString(), pair: `${t0.symbol}/${t1.symbol}`, fee: Number(fee), actions, notes: ["Pass `actions` unchanged to sovereign_execute. To re-enter, ask for an lp-plan with budget \"balances\" afterwards."] };
