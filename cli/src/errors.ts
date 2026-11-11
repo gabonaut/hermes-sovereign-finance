@@ -140,9 +140,9 @@ export function decodeFailure(e: unknown): DecodedFailure {
   } else if (relayCode === 300) {
     code = "RELAY_REJECTED";
     message = relayDropped();
-  } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired/i.test(raw)) {
+  } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired|Invalid parameters were provided to the RPC method/i.test(raw)) {
     code = "QUOTE_EXPIRED";
-    message = "The approval took longer than the relay's fee quote lasts (30 seconds on mainnet). Nothing was sent. Start again and approve the passkey prompt promptly.";
+    message = "The relay did not accept the signed request, and nothing was sent. This happens when the approval takes longer than the relay's fee quote lasts, which is 30 seconds on mainnet. Start again and approve the passkey prompt straight away.";
   } else if (/insufficient|not enough/i.test(raw)) {
     code = "INSUFFICIENT_FUNDS";
   }

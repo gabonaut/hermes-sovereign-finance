@@ -22,7 +22,7 @@ function page(nonce: string): string {
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: Canvas; color: CanvasText; }
   main { width: min(34rem, calc(100vw - 3rem)); padding: 2rem 0; }
   h1 { font-size: 1rem; font-weight: 600; margin: 0 0 1.5rem; opacity: .7; }
-  #prompt { font-size: 1.25rem; line-height: 1.4; margin: 0 0 1.5rem; overflow-wrap: anywhere; }
+  #prompt { font-size: 1.15rem; line-height: 1.5; margin: 0 0 1.5rem; overflow-wrap: anywhere; white-space: pre-line; }
   button { font: inherit; font-weight: 600; padding: .7rem 1.2rem; border-radius: .5rem; border: 1px solid transparent; cursor: pointer; }
   #approve { background: CanvasText; color: Canvas; }
   #cancel { background: transparent; color: inherit; border-color: color-mix(in srgb, CanvasText 30%, transparent); margin-left: .5rem; }
@@ -79,7 +79,8 @@ h1 svg{vertical-align:-4px;margin-right:8px}
         if (r.idle) return poll();
         current = r;
         seq = r.seq;
-        promptEl.textContent = r.prompt;
+        // One statement per line.
+        promptEl.textContent = String(r.prompt).replace(/\. (?=[A-Z])/g, ".\n");
         approveBtn.textContent = r.kind === "ready" ? "Continue" : "Approve with passkey";
         buttons.hidden = false;
         approveBtn.disabled = false;
