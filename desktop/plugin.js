@@ -3180,7 +3180,7 @@ var PAGE_PATH = "/sovereign-finance";
 var plugin = {
   id: PLUGIN_ID,
   name: "Sovereign Finance",
-  description: "A self-custodial Altana smart wallet on BNB Chain and Ethereum. Your passkey is the admin key. The agent holds a session key with onchain limits.",
+  description: "A Smart Agentic Wallet powered by Altana, on BNB Chain and Ethereum. Self-custodial. Your passkey is the admin key. The agent holds a session key with onchain limits.",
   register(ctx) {
     const store = createStore(ctx);
     ctx.register({
