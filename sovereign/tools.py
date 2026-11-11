@@ -12,20 +12,20 @@ _NETWORK = {"type": "string", "enum": ["bnb", "ethereum"],
 SCHEMAS = [
     {
         "name": "sovereign_status",
-        "description": ("Read the Sovereign Finance wallet: address, mode, balances, and the agent's session on each network "
+        "description": ("The user's onchain wallet in Hermes (Sovereign Finance: crypto, DeFi, BNB Chain, Ethereum). Read it: address, mode, balances, and the agent's session on each network "
                         "(status, expiry, what it may call, daily caps). Read-only. Call this before planning anything."),
         "parameters": {"type": "object", "properties": {"network": {**_NETWORK, "description": _NETWORK["description"] + " Omit for both."}},
                        "additionalProperties": False},
     },
     {
         "name": "sovereign_positions",
-        "description": ("List the wallet's V3 liquidity positions on one network: pool, range, whether the price is in range, "
+        "description": ("List the Sovereign Finance wallet's V3 liquidity positions (LP, pools) on one network: pool, range, whether the price is in range, "
                         "amounts and unclaimed fees. Read-only."),
         "parameters": {"type": "object", "properties": {"network": _NETWORK}, "required": ["network"], "additionalProperties": False},
     },
     {
         "name": "sovereign_quote",
-        "description": ("Read-only planning. kind=pools lists the most traded V3 pools with fee tier, TVL and fee APR. "
+        "description": ("Read-only planning for the Sovereign Finance wallet: pools, swap quotes and liquidity position plans. kind=pools lists the most traded V3 pools with fee tier, TVL and fee APR. "
                         "kind=swap quotes a swap. kind=lp-plan sizes a range for a new position and kind=exit-plan prepares closing one: "
                         "both return a planId, and sovereign_execute runs it from that id. To open or close without a preview, "
                         "skip this tool and call sovereign_execute with `open` or `close`."),
@@ -55,7 +55,7 @@ SCHEMAS = [
     },
     {
         "name": "sovereign_execute",
-        "description": ("Send one batch from the wallet with the agent's session key. The user is asked to approve it. "
+        "description": ("Act from the user's Sovereign Finance wallet: open or close a liquidity position (LP) in a pool, swap, wrap. Sends one batch with the agent's session key. The user is asked to approve it. "
                         "Fastest way, one call and no planning step: pass `open` to open a liquidity position, or `close` to close one, "
                         "and the plugin builds the whole batch (wrap, swap, approvals, mint). "
                         'Example: {"network": "bnb", "open": {"pair": "USDT/WBNB", "fee": 500, "budget": {"symbol": "BNB", "amount": "0.004"}, "rangePct": 3}}. '

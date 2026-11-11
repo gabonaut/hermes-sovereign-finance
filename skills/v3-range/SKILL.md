@@ -1,6 +1,6 @@
 ---
 name: v3-range
-description: Provide V3 liquidity on PancakeSwap (BNB) and Uniswap (ETH).
+description: Open, check, rebalance and close liquidity positions and swap tokens on PancakeSwap (BNB) and Uniswap (Ethereum) from the user's Sovereign Finance wallet, using the sovereign_ tools.
 version: 1.0.0
 author: Sovereign Finance
 license: GPL-3.0
