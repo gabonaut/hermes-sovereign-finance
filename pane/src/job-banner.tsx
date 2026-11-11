@@ -46,6 +46,14 @@ interface JobBannerProps {
   openFailed: string | null
 }
 
+const RUNNING_TITLE: Record<string, string> = {
+  create: 'Creating the wallet',
+  recover: 'Recovering the wallet',
+  activate: 'Activating',
+  revoke: 'Revoking',
+  withdraw: 'Sending'
+}
+
 export function JobBanner({ job, networks, openFailed }: JobBannerProps) {
   const { store } = usePane()
   const cancel = useAction()
@@ -115,13 +123,31 @@ export function JobBanner({ job, networks, openFailed }: JobBannerProps) {
   }
 
   if (job.status === 'running') {
+    // "step 2 of 3" in the step text becomes a row of dots, so a staged activation shows where it is.
+    const staged = /step (\d+) of (\d+)/i.exec(job.step ?? '')
+    const at = staged ? Number(staged[1]) : 0
+    const of = staged ? Number(staged[2]) : 0
     return (
-      <section aria-live="polite" className="sf-job" data-tone="run">
+      <section aria-live="polite" className="sf-job sf-job-busy" data-tone="run">
         <span className="sf-job-icon">
           <Loader label="Working" style={{ width: 18, height: 18 }} />
         </span>
         <div className="sf-job-main">
+          <div className="sf-job-title">{RUNNING_TITLE[job.kind] ?? 'Working'}</div>
           <div className="sf-job-step">{job.step || 'Working'}</div>
+          {of > 1 ? (
+            <div aria-hidden="true" className="sf-job-dots">
+              {Array.from({ length: of }, (_, i) => (
+                <span data-state={i + 1 < at ? 'done' : i + 1 === at ? 'now' : 'next'} key={i} />
+              ))}
+            </div>
+          ) : null}
+          <div className="sf-job-bar" />
+          <div className="sf-job-detail">
+            {job.kind === 'activate'
+              ? 'Keep the browser tab open. It asks for each approval in turn, and this can take a minute or two.'
+              : 'Waiting for the network to confirm.'}
+          </div>
         </div>
       </section>
     )

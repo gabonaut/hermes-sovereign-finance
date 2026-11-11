@@ -72,6 +72,18 @@ export const PANE_CSS = `
 .sf-job[data-tone=done]{background:color-mix(in srgb,var(--sf-green) 9%,transparent)}
 .sf-job[data-tone=partial]{background:color-mix(in srgb,var(--sf-yellow) 10%,transparent)}
 .sf-job[data-tone=error]{background:color-mix(in srgb,var(--sf-red) 8%,transparent)}
+.sf-job-busy{padding-top:14px;padding-bottom:16px;background:color-mix(in srgb,var(--sf-accent) 9%,transparent);border-bottom:2px solid var(--sf-accent)}
+.sf-job-busy .sf-job-title{font-size:14px}
+.sf-job-dots{display:flex;gap:6px;margin-top:2px}
+.sf-job-dots span{width:22px;height:4px;border-radius:2px;background:color-mix(in srgb,var(--sf-accent) 22%,transparent)}
+.sf-job-dots span[data-state=done]{background:var(--sf-accent)}
+.sf-job-dots span[data-state=now]{background:var(--sf-accent);animation:sf-blink 1.1s ease-in-out infinite}
+.sf-job-bar{position:relative;height:2px;margin-top:4px;overflow:hidden;border-radius:1px;background:color-mix(in srgb,var(--sf-accent) 16%,transparent)}
+.sf-job-bar::after{content:"";position:absolute;inset:0 auto 0 0;width:35%;background:var(--sf-accent);animation:sf-slide 1.4s ease-in-out infinite}
+@keyframes sf-slide{0%{transform:translateX(-100%)}100%{transform:translateX(290%)}}
+@keyframes sf-blink{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.sf-job-bar::after,.sf-job-dots span[data-state=now]{animation:none}}
+.sf-content[data-busy]{opacity:.45;pointer-events:none;transition:opacity .2s}
 .sf-job-icon{display:flex;align-items:center;justify-content:center;height:20px}
 .sf-job[data-tone=done] .sf-job-icon{color:var(--sf-green)}
 .sf-job[data-tone=partial] .sf-job-icon{color:var(--sf-yellow)}

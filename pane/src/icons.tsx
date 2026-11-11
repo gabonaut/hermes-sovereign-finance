@@ -50,3 +50,12 @@ export const IconAlert = (props: IconProps) => (
     <path d="M10.3 4.2L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z" />
   </Glyph>
 )
+
+/** The Altana mark, in its own colours. */
+export const AltanaMark = ({ size = 16 }: { size?: number }) => (
+  <svg aria-hidden="true" fill="none" focusable="false" height={size} viewBox="-4.737 -26.701 449.183 449.183" width={size}>
+    <path d="M298.4 361.864L156.979 220.442L298.4 79.0211L383.253 163.874C414.495 195.116 414.495 245.769 383.253 277.011L298.4 361.864Z" fill="#E2622E" />
+    <path d="M141.421 361.45L56.5686 276.597C25.3266 245.355 25.3266 194.702 56.5686 163.46L141.421 78.6075L282.843 220.029L141.421 361.45Z" fill="#F2CB45" />
+    <path d="M163.617 56.7248C194.858 25.4828 245.512 25.4828 276.754 56.7248L361.96 141.931L220.066 283.825L78.2908 142.051L163.617 56.7248Z" fill="#3665E4" />
+  </svg>
+)

@@ -20274,11 +20274,12 @@ function page(nonce) {
   button:disabled { opacity: .45; cursor: default; }
   #status { margin: 1.25rem 0 0; min-height: 1.5rem; opacity: .8; }
   #origin { margin-top: 2rem; font-size: .85rem; opacity: .6; }
+h1 svg{vertical-align:-4px;margin-right:8px}
 </style>
 </head>
 <body>
 <main>
-  <h1>Sovereign Finance for Hermes</h1>
+  <h1><svg aria-hidden="true" width="20" height="20" viewBox="-4.737 -26.701 449.183 449.183" fill="none"><path d="M298.4 361.864L156.979 220.442L298.4 79.0211L383.253 163.874C414.495 195.116 414.495 245.769 383.253 277.011L298.4 361.864Z" fill="#E2622E"/><path d="M141.421 361.45L56.5686 276.597C25.3266 245.355 25.3266 194.702 56.5686 163.46L141.421 78.6075L282.843 220.029L141.421 361.45Z" fill="#F2CB45"/><path d="M163.617 56.7248C194.858 25.4828 245.512 25.4828 276.754 56.7248L361.96 141.931L220.066 283.825L78.2908 142.051L163.617 56.7248Z" fill="#3665E4"/></svg>Sovereign Finance for Hermes</h1>
   <p id="prompt">Waiting for a request from Hermes.</p>
   <div id="buttons" hidden>
     <button id="approve" type="button">Approve with passkey</button>
@@ -47400,6 +47401,17 @@ function ceil6(raw) {
   return formatUnits((raw + unit - 1n) / unit * unit, 18);
 }
 var BUDGET_SLOT_GAS = 85000n;
+function floor6(raw) {
+  const unit = 10n ** 12n;
+  return formatUnits(raw / unit * unit, 18);
+}
+async function withdrawReserve(chain, wallet) {
+  const [fee, keys, gasPrice, buffer2] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), rpc(chain).getGasPrice(), relayGasBuffer(chain)]);
+  const first = keys.length === 0;
+  const gas = 600000n + (first ? 550000n : 0n) + buffer2 + (chain.storageBudget ? (first ? 16n : 2n) * BUDGET_SLOT_GAS : 0n);
+  const price = gasPrice * 2n > 100000000n ? gasPrice * 2n : 100000000n;
+  return gas * price + (first ? fee : 0n);
+}
 async function costOf(chain, wallet, permissions) {
   const client = rpc(chain);
   const [fee, keys, gasPrice, balance, buffer2] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet), relayGasBuffer(chain)]);
@@ -47632,10 +47644,11 @@ async function withdraw(ctx, input2) {
   const decimals = isNative ? 18 : asset.decimals;
   const held = await balances2(chain, wallet.address);
   const have = isNative ? held.nativeRaw : held.tokens.find((t) => t.symbol === symbol2).raw;
+  const reserve = await withdrawReserve(chain, wallet.address);
+  const most = isNative ? held.nativeRaw > reserve ? held.nativeRaw - reserve : 0n : have;
   let amount;
   if (String(input2.amount).trim().toLowerCase() === "max") {
-    const reserve = isNative ? await rpc(chain).getGasPrice() * 900000n : 0n;
-    amount = have > reserve ? have - reserve : 0n;
+    amount = most;
   } else {
     try {
       amount = parseUnits(String(input2.amount).trim(), decimals);
@@ -47643,8 +47656,14 @@ async function withdraw(ctx, input2) {
       throw new CliError("BAD_AMOUNT", `"${input2.amount}" is not a number.`);
     }
   }
-  if (amount <= 0n) throw new CliError("BAD_AMOUNT", "Nothing to send.");
+  if (amount <= 0n) throw new CliError("BAD_AMOUNT", most === 0n && isNative ? `The wallet holds ${formatUnits(have, decimals)} ${symbol2} on ${chain.name}, which is not more than the fee of about ${ceil6(reserve)}.` : "Nothing to send.");
   if (amount > have) throw new CliError("INSUFFICIENT_FUNDS", `The wallet holds ${formatUnits(have, decimals)} ${symbol2} on ${chain.name}.`);
+  if (isNative && amount > most) {
+    throw new CliError("INSUFFICIENT_FUNDS", `About ${ceil6(reserve)} ${symbol2} has to stay in the wallet for the fee. The most you can send is ${floor6(most)} ${symbol2}. Use Max to send that.`);
+  }
+  if (!isNative && held.nativeRaw < reserve) {
+    throw new CliError("INSUFFICIENT_FUNDS", `The wallet holds ${formatUnits(held.nativeRaw, 18)} ${chain.nativeSymbol} on ${chain.name}. Sending needs about ${ceil6(reserve)} for the fee.`);
+  }
   const calls = isNative ? [{ to, value: amount }] : [{ to: asset.address, data: encodeFunctionData({ abi: erc20Abi2, functionName: "transfer", args: [to, amount] }) }];
   const client = altanaClient(chainsFor(ctx.mode));
   const res = await withPasskey(ctx, async (fns, say) => {

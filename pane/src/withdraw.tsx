@@ -69,8 +69,11 @@ function WithdrawForm({ onClose, address, networks, send }: WithdrawDialogProps 
   const isNative = asset !== undefined && network !== undefined && asset.symbol === network.nativeSymbol
   const known = asset !== undefined && isDecimal(asset.amount)
 
+  // "max" is sent as it is: the plugin works out the largest amount that still leaves the fee behind.
+  const isMax = amount.trim().toLowerCase() === 'max'
   let amountError: string | null = null
-  if (!isPositive(amount)) amountError = 'Enter an amount above 0.'
+  if (isMax) amountError = null
+  else if (!isPositive(amount)) amountError = 'Enter an amount above 0.'
   else if (asset && known && compareDecimal(amount, asset.amount) === 1) amountError = `More than the ${asset.symbol} balance.`
 
   let toError: string | null = null
@@ -164,8 +167,8 @@ function WithdrawForm({ onClose, address, networks, send }: WithdrawDialogProps 
             <label className="sf-label" htmlFor={`${uid}-amount`}>
               Amount
             </label>
-            {asset && known && !isNative && isPositive(asset.amount) ? (
-              <Button onClick={() => setAmount(asset.amount)} size="inline" type="button" variant="text">
+            {asset && known && isPositive(asset.amount) ? (
+              <Button onClick={() => setAmount(isNative ? 'max' : asset.amount)} size="inline" type="button" variant="text">
                 Max
               </Button>
             ) : null}
@@ -176,7 +179,7 @@ function WithdrawForm({ onClose, address, networks, send }: WithdrawDialogProps 
             className="sf-num-input"
             containerClassName={attempted && amountError ? 'sf-invalid' : undefined}
             id={`${uid}-amount`}
-            inputMode="decimal"
+            inputMode="text"
             onChange={e => setAmount(e.target.value)}
             placeholder="0.0"
             ref={amountRef}
@@ -186,6 +189,11 @@ function WithdrawForm({ onClose, address, networks, send }: WithdrawDialogProps 
           {attempted && amountError ? (
             <span className="sf-field-error" id={`${uid}-amount-error`} role="alert">
               {amountError}
+            </span>
+          ) : null}
+          {isNative ? (
+            <span className="sf-hint">
+              {isMax ? 'Sends everything except the network fee.' : 'The network fee is paid from this balance. Max leaves it behind.'}
             </span>
           ) : null}
         </div>

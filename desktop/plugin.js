@@ -201,10 +201,6 @@ function errorText(err) {
   return toApiError(err).message;
 }
 
-// src/ui.tsx
-import { CopyButton, Tip } from "@hermes/plugin-sdk";
-import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState } from "react";
-
 // src/icons.tsx
 import { jsx, jsxs } from "react/jsx-runtime";
 function Glyph({ children, ...props }) {
@@ -237,8 +233,15 @@ var IconAlert = (props) => /* @__PURE__ */ jsxs(Glyph, { ...props, children: [
   /* @__PURE__ */ jsx("path", { d: "M12 16.5v.01" }),
   /* @__PURE__ */ jsx("path", { d: "M10.3 4.2L2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z" })
 ] });
+var AltanaMark = ({ size = 16 }) => /* @__PURE__ */ jsxs("svg", { "aria-hidden": "true", fill: "none", focusable: "false", height: size, viewBox: "-4.737 -26.701 449.183 449.183", width: size, children: [
+  /* @__PURE__ */ jsx("path", { d: "M298.4 361.864L156.979 220.442L298.4 79.0211L383.253 163.874C414.495 195.116 414.495 245.769 383.253 277.011L298.4 361.864Z", fill: "#E2622E" }),
+  /* @__PURE__ */ jsx("path", { d: "M141.421 361.45L56.5686 276.597C25.3266 245.355 25.3266 194.702 56.5686 163.46L141.421 78.6075L282.843 220.029L141.421 361.45Z", fill: "#F2CB45" }),
+  /* @__PURE__ */ jsx("path", { d: "M163.617 56.7248C194.858 25.4828 245.512 25.4828 276.754 56.7248L361.96 141.931L220.066 283.825L78.2908 142.051L163.617 56.7248Z", fill: "#3665E4" })
+] });
 
 // src/ui.tsx
+import { CopyButton, Tip } from "@hermes/plugin-sdk";
+import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState } from "react";
 import { jsx as jsx2, jsxs as jsxs2 } from "react/jsx-runtime";
 var PaneContext = createContext(null);
 function usePane() {
@@ -359,6 +362,7 @@ function Header({ mode, loading, pending, disabled, onSwitch }) {
   const shown = pending ?? mode;
   return /* @__PURE__ */ jsxs3(Fragment, { children: [
     /* @__PURE__ */ jsxs3("header", { className: "sf-header", children: [
+      /* @__PURE__ */ jsx3(AltanaMark, { size: 18 }),
       /* @__PURE__ */ jsx3("h2", { className: "sf-title", children: "Sovereign Finance" }),
       shown === "mainnet" ? /* @__PURE__ */ jsx3(Badge, { variant: "warn", children: "Real funds" }) : null,
       shown === null ? loading ? /* @__PURE__ */ jsx3(Skeleton, { style: { width: 132, height: 24 } }) : null : /* @__PURE__ */ jsx3(
@@ -831,6 +835,13 @@ function hostOf2(url) {
     return url;
   }
 }
+var RUNNING_TITLE = {
+  create: "Creating the wallet",
+  recover: "Recovering the wallet",
+  activate: "Activating",
+  revoke: "Revoking",
+  withdraw: "Sending"
+};
 function JobBanner({ job: job2, networks, openFailed }) {
   const { store } = usePane();
   const cancel = useAction();
@@ -897,9 +908,18 @@ function JobBanner({ job: job2, networks, openFailed }) {
     ] });
   }
   if (job2.status === "running") {
-    return /* @__PURE__ */ jsxs4("section", { "aria-live": "polite", className: "sf-job", "data-tone": "run", children: [
+    const staged = /step (\d+) of (\d+)/i.exec(job2.step ?? "");
+    const at = staged ? Number(staged[1]) : 0;
+    const of = staged ? Number(staged[2]) : 0;
+    return /* @__PURE__ */ jsxs4("section", { "aria-live": "polite", className: "sf-job sf-job-busy", "data-tone": "run", children: [
       /* @__PURE__ */ jsx4("span", { className: "sf-job-icon", children: /* @__PURE__ */ jsx4(Loader, { label: "Working", style: { width: 18, height: 18 } }) }),
-      /* @__PURE__ */ jsx4("div", { className: "sf-job-main", children: /* @__PURE__ */ jsx4("div", { className: "sf-job-step", children: job2.step || "Working" }) })
+      /* @__PURE__ */ jsxs4("div", { className: "sf-job-main", children: [
+        /* @__PURE__ */ jsx4("div", { className: "sf-job-title", children: RUNNING_TITLE[job2.kind] ?? "Working" }),
+        /* @__PURE__ */ jsx4("div", { className: "sf-job-step", children: job2.step || "Working" }),
+        of > 1 ? /* @__PURE__ */ jsx4("div", { "aria-hidden": "true", className: "sf-job-dots", children: Array.from({ length: of }, (_, i) => /* @__PURE__ */ jsx4("span", { "data-state": i + 1 < at ? "done" : i + 1 === at ? "now" : "next" }, i)) }) : null,
+        /* @__PURE__ */ jsx4("div", { className: "sf-job-bar" }),
+        /* @__PURE__ */ jsx4("div", { className: "sf-job-detail", children: job2.kind === "activate" ? "Keep the browser tab open. It asks for each approval in turn, and this can take a minute or two." : "Waiting for the network to confirm." })
+      ] })
     ] });
   }
   if (job2.status === "error") {
@@ -2292,6 +2312,18 @@ var PANE_CSS = `
 .sf-job[data-tone=done]{background:color-mix(in srgb,var(--sf-green) 9%,transparent)}
 .sf-job[data-tone=partial]{background:color-mix(in srgb,var(--sf-yellow) 10%,transparent)}
 .sf-job[data-tone=error]{background:color-mix(in srgb,var(--sf-red) 8%,transparent)}
+.sf-job-busy{padding-top:14px;padding-bottom:16px;background:color-mix(in srgb,var(--sf-accent) 9%,transparent);border-bottom:2px solid var(--sf-accent)}
+.sf-job-busy .sf-job-title{font-size:14px}
+.sf-job-dots{display:flex;gap:6px;margin-top:2px}
+.sf-job-dots span{width:22px;height:4px;border-radius:2px;background:color-mix(in srgb,var(--sf-accent) 22%,transparent)}
+.sf-job-dots span[data-state=done]{background:var(--sf-accent)}
+.sf-job-dots span[data-state=now]{background:var(--sf-accent);animation:sf-blink 1.1s ease-in-out infinite}
+.sf-job-bar{position:relative;height:2px;margin-top:4px;overflow:hidden;border-radius:1px;background:color-mix(in srgb,var(--sf-accent) 16%,transparent)}
+.sf-job-bar::after{content:"";position:absolute;inset:0 auto 0 0;width:35%;background:var(--sf-accent);animation:sf-slide 1.4s ease-in-out infinite}
+@keyframes sf-slide{0%{transform:translateX(-100%)}100%{transform:translateX(290%)}}
+@keyframes sf-blink{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.sf-job-bar::after,.sf-job-dots span[data-state=now]{animation:none}}
+.sf-content[data-busy]{opacity:.45;pointer-events:none;transition:opacity .2s}
 .sf-job-icon{display:flex;align-items:center;justify-content:center;height:20px}
 .sf-job[data-tone=done] .sf-job-icon{color:var(--sf-green)}
 .sf-job[data-tone=partial] .sf-job-icon{color:var(--sf-yellow)}
@@ -2516,8 +2548,10 @@ function WithdrawForm({ onClose, address, networks, send }) {
   const asset = pickable.find((a) => a.symbol === symbol) ?? pickable[0];
   const isNative = asset !== void 0 && network2 !== void 0 && asset.symbol === network2.nativeSymbol;
   const known = asset !== void 0 && isDecimal(asset.amount);
+  const isMax = amount.trim().toLowerCase() === "max";
   let amountError = null;
-  if (!isPositive(amount)) amountError = "Enter an amount above 0.";
+  if (isMax) amountError = null;
+  else if (!isPositive(amount)) amountError = "Enter an amount above 0.";
   else if (asset && known && compareDecimal(amount, asset.amount) === 1) amountError = `More than the ${asset.symbol} balance.`;
   let toError = null;
   const target = to.trim();
@@ -2601,7 +2635,7 @@ function WithdrawForm({ onClose, address, networks, send }) {
           /* @__PURE__ */ jsxs9("div", { className: "sf-stack", children: [
             /* @__PURE__ */ jsxs9("div", { className: "sf-label-row", children: [
               /* @__PURE__ */ jsx9("label", { className: "sf-label", htmlFor: `${uid}-amount`, children: "Amount" }),
-              asset && known && !isNative && isPositive(asset.amount) ? /* @__PURE__ */ jsx9(Button5, { onClick: () => setAmount(asset.amount), size: "inline", type: "button", variant: "text", children: "Max" }) : null
+              asset && known && isPositive(asset.amount) ? /* @__PURE__ */ jsx9(Button5, { onClick: () => setAmount(isNative ? "max" : asset.amount), size: "inline", type: "button", variant: "text", children: "Max" }) : null
             ] }),
             /* @__PURE__ */ jsx9(
               Input2,
@@ -2611,7 +2645,7 @@ function WithdrawForm({ onClose, address, networks, send }) {
                 className: "sf-num-input",
                 containerClassName: attempted && amountError ? "sf-invalid" : void 0,
                 id: `${uid}-amount`,
-                inputMode: "decimal",
+                inputMode: "text",
                 onChange: (e) => setAmount(e.target.value),
                 placeholder: "0.0",
                 ref: amountRef,
@@ -2619,7 +2653,8 @@ function WithdrawForm({ onClose, address, networks, send }) {
                 value: amount
               }
             ),
-            attempted && amountError ? /* @__PURE__ */ jsx9("span", { className: "sf-field-error", id: `${uid}-amount-error`, role: "alert", children: amountError }) : null
+            attempted && amountError ? /* @__PURE__ */ jsx9("span", { className: "sf-field-error", id: `${uid}-amount-error`, role: "alert", children: amountError }) : null,
+            isNative ? /* @__PURE__ */ jsx9("span", { className: "sf-hint", children: isMax ? "Sends everything except the network fee." : "The network fee is paid from this balance. Max leaves it behind." }) : null
           ] }),
           /* @__PURE__ */ jsxs9("div", { className: "sf-stack", children: [
             /* @__PURE__ */ jsxs9("label", { className: "sf-label", htmlFor: `${uid}-to`, children: [
@@ -2791,7 +2826,7 @@ function Pane({ ctx, store }) {
   } else if (!state) {
     body = loading || !error ? /* @__PURE__ */ jsx10(LoadingBody, {}) : /* @__PURE__ */ jsx10(FailedBody, { message: error.message, onRetry: store.refresh, title: "Wallet not loaded" });
   } else {
-    body = /* @__PURE__ */ jsxs10("div", { className: "sf-content", "data-pending": pendingMode !== null || void 0, children: [
+    body = /* @__PURE__ */ jsxs10("div", { className: "sf-content", "data-busy": jobIsActive(job2) || void 0, "data-pending": pendingMode !== null || void 0, children: [
       error ? /* @__PURE__ */ jsxs10(Warning, { children: [
         "Not refreshed. ",
         error.message

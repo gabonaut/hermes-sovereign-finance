@@ -194,7 +194,7 @@ export function Pane({ ctx, store }: { ctx: PluginContext; store: Store }) {
     body = loading || !error ? <LoadingBody /> : <FailedBody message={error.message} onRetry={store.refresh} title="Wallet not loaded" />
   } else {
     body = (
-      <div className="sf-content" data-pending={pendingMode !== null || undefined}>
+      <div className="sf-content" data-busy={jobIsActive(job) || undefined} data-pending={pendingMode !== null || undefined}>
         {error ? <Warning>Not refreshed. {error.message}</Warning> : null}
         <Steps draft={draft} onDraft={onDraft} onWithdraw={() => setWithdrawing(true)} state={state} />
         <LiveSection networks={state.networks} />
