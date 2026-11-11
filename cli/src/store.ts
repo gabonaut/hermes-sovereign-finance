@@ -136,6 +136,10 @@ export type SessionRecord = {
   revokeTx: string | null;
   revokedAt: string | null;
   charged: string | null;
+  /** Grants already confirmed for a pending session, on a network that activates in stages. */
+  stagesDone?: number;
+  /** Transaction hash of every confirmed grant, in order. */
+  grantTxs?: string[];
 };
 
 export type ScopeRecord = {

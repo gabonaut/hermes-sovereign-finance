@@ -12,6 +12,7 @@ if (modeIndex >= 0 && argv[modeIndex + 1] === "mainnet") {
   process.stderr.write("The development runner signs with a software key and does not run on mainnet.\n");
   process.exit(2);
 }
-process.exitCode = await run([...argv, ...(modeIndex >= 0 ? [] : ["--mode", "testnet"])], {
+const code = await run([...argv, ...(modeIndex >= 0 ? [] : ["--mode", "testnet"])], {
   openTransport: async (_job, log) => softwareTransport(path.join(dataDir, "dev-authenticator.json"), log),
 });
+process.stdout.write("", () => process.exit(code));

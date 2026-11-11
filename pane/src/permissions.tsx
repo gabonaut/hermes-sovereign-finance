@@ -296,6 +296,10 @@ export function ActivateStep({ state, draft, onActivated }: ActivateStepProps) {
     rows.push({ network, part, enough, ticked: enough && ticks[network.key] !== false })
   }
   const chosen = rows.filter(row => row.ticked)
+  // Most networks take one approval. One that activates in stages takes more, and the count is shown per network.
+  const approvalsHint = chosen.every(row => row.part.approvals === 1)
+    ? 'Each network needs one passkey approval.'
+    : `Passkey approvals: ${chosen.map(row => `${row.part.approvals} on ${row.network.name}`).join(', ')}.`
 
   return (
     <>
@@ -352,7 +356,7 @@ export function ActivateStep({ state, draft, onActivated }: ActivateStepProps) {
       </ul>
 
       <div className="sf-submit">
-        <span className="sf-hint">Each network needs one passkey approval.</span>
+        <span className="sf-hint">{approvalsHint}</span>
         <Button disabled={locked || chosen.length === 0} onClick={() => setConfirming(true)} size="sm" type="button">
           Activate
         </Button>
@@ -360,7 +364,7 @@ export function ActivateStep({ state, draft, onActivated }: ActivateStepProps) {
 
       <ConfirmDialog
         confirmLabel="Activate"
-        description="Each network needs one passkey approval."
+        description={approvalsHint}
         dismissOnConfirm
         onClose={() => setConfirming(false)}
         onConfirm={async () => {

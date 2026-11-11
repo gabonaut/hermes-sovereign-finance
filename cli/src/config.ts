@@ -41,6 +41,8 @@ export type Chain = {
   sdkConfig: string | null;
   /** A caveat about this network's relay, shown with relay failures. */
   relayNote: string | null;
+  /** New storage slots one relayed transaction can write here, or null when there is no such limit. See budget.ts. */
+  storageBudget: number | null;
 };
 
 const SDK_CONFIGS: Record<string, NetworkConfig> = { BNB, ETHEREUM, BNB_TESTNET };
@@ -78,6 +80,7 @@ function parseChain(id: string, raw: any): Chain {
     preset: raw.preset,
     sdkConfig: raw.sdkConfig,
     relayNote: typeof raw.relayNote === "string" ? raw.relayNote : null,
+    storageBudget: Number.isInteger(raw.storageBudget) && raw.storageBudget > 0 ? raw.storageBudget : null,
   };
 }
 

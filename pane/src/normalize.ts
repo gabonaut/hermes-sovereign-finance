@@ -207,7 +207,8 @@ function draftNetwork(v: unknown): DraftNetwork | null {
       firstAction: cost.firstAction === true
     },
     balance: text(d.balance, '0'),
-    sufficient: d.sufficient !== false
+    sufficient: d.sufficient !== false,
+    approvals: Math.max(1, int(d.approvals, 1))
   }
 }
 

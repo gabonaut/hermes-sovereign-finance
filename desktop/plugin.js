@@ -566,7 +566,8 @@ function draftNetwork(v) {
       firstAction: cost.firstAction === true
     },
     balance: text(d.balance, "0"),
-    sufficient: d.sufficient !== false
+    sufficient: d.sufficient !== false,
+    approvals: Math.max(1, int(d.approvals, 1))
   };
 }
 function normalizeDraft(v) {
@@ -1331,6 +1332,7 @@ function ActivateStep({ state, draft, onActivated }) {
     rows.push({ network: network2, part, enough, ticked: enough && ticks[network2.key] !== false });
   }
   const chosen = rows.filter((row) => row.ticked);
+  const approvalsHint = chosen.every((row) => row.part.approvals === 1) ? "Each network needs one passkey approval." : `Passkey approvals: ${chosen.map((row) => `${row.part.approvals} on ${row.network.name}`).join(", ")}.`;
   return /* @__PURE__ */ jsxs6(Fragment2, { children: [
     /* @__PURE__ */ jsx6("ul", { className: "sf-costs", children: rows.map(({ network: network2, part, enough, ticked }) => {
       const boxId = `${uid}-${network2.key}`;
@@ -1374,14 +1376,14 @@ function ActivateStep({ state, draft, onActivated }) {
       ] }, network2.key);
     }) }),
     /* @__PURE__ */ jsxs6("div", { className: "sf-submit", children: [
-      /* @__PURE__ */ jsx6("span", { className: "sf-hint", children: "Each network needs one passkey approval." }),
+      /* @__PURE__ */ jsx6("span", { className: "sf-hint", children: approvalsHint }),
       /* @__PURE__ */ jsx6(Button3, { disabled: locked || chosen.length === 0, onClick: () => setConfirming(true), size: "sm", type: "button", children: "Activate" })
     ] }),
     /* @__PURE__ */ jsx6(
       ConfirmDialog3,
       {
         confirmLabel: "Activate",
-        description: "Each network needs one passkey approval.",
+        description: approvalsHint,
         dismissOnConfirm: true,
         onClose: () => setConfirming(false),
         onConfirm: async () => {

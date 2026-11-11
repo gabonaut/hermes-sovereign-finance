@@ -2,9 +2,10 @@
 import crypto from "node:crypto";
 import { encodeFunctionData, formatUnits, getAddress, keccak256, parseUnits, type Address, type Hex } from "viem";
 import { generatePrivateKey } from "viem/accounts";
-import { serializeSession, signerFromPasskey, signerFromPrivateKey } from "@altananetwork/sdk";
+import { serializeSession, signerFromPasskey, signerFromPrivateKey, type SessionPermissions } from "@altananetwork/sdk";
 import { erc20Abi } from "./abi.ts";
 import { altanaClient, chainFor, chainsFor, findAsset, isNetworkKey, keystoreKeyUrl, rpc, txUrl, type Chain, type Mode, type NetworkKey } from "./config.ts";
+import { activationSlots, planStages } from "./budget.ts";
 import { balances, keystoreKeys, nativeBalance, registrationFee, relayGasBuffer, relayServes } from "./chainread.ts";
 import { CliError, decodeFailure, relayDropped } from "./errors.ts";
 import type { JobReporter } from "./job.ts";
@@ -109,12 +110,22 @@ function ceil6(raw: bigint): string {
   return formatUnits(((raw + unit - 1n) / unit) * unit, 18);
 }
 
-async function costOf(chain: Chain, wallet: Address, callEntries: number, spendEntries: number) {
+/** Extra gas one new storage slot costs on a network with a storage budget. */
+const BUDGET_SLOT_GAS = 85_000n;
+
+async function costOf(chain: Chain, wallet: Address, permissions: SessionPermissions) {
   const client = rpc(chain);
   const [fee, keys, gasPrice, balance, buffer] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet), relayGasBuffer(chain)]);
   const firstAction = keys.length === 0;
   const keystoreFee = fee * (firstAction ? 2n : 1n);
-  const relayFee = ((estimateGrantGas(callEntries, spendEntries, firstAction) + buffer) * gasPrice * 125n) / 100n;
+  // Every stage is a transaction of its own: the relay's buffer and a base cost apply to each.
+  const stages = planStages(permissions, chain.storageBudget).length;
+  const gas =
+    estimateGrantGas(permissions.calls?.length ?? 0, permissions.spend?.length ?? 0, firstAction) +
+    BigInt(stages - 1) * 500_000n +
+    BigInt(stages) * buffer +
+    (chain.storageBudget ? BigInt(activationSlots(permissions)) * BUDGET_SLOT_GAS : 0n);
+  const relayFee = (gas * gasPrice * 125n) / 100n;
   const total = keystoreFee + relayFee;
   return {
     cost: {
@@ -124,6 +135,8 @@ async function costOf(chain: Chain, wallet: Address, callEntries: number, spendE
       nativeSymbol: chain.nativeSymbol,
       firstAction,
     },
+    /** Passkey approvals this activation takes on this network. */
+    approvals: stages,
     balance: formatUnits(balance, 18),
     sufficient: balance >= total,
     keystoreFeeRaw: keystoreFee,
@@ -144,7 +157,7 @@ export async function grantDraft(ctx: Pick<AdminCtx, "store" | "mode">, input: {
   for (const key of keys) {
     const chain = chainFor(ctx.mode, key);
     const policy = compilePolicy(chain, input.networks[key]!, expiry);
-    const { keystoreFeeRaw: _fee, balanceRaw: _balance, ...priced } = await costOf(chain, wallet.address, policy.permissions.calls!.length, policy.permissions.spend!.length);
+    const { keystoreFeeRaw: _fee, balanceRaw: _balance, ...priced } = await costOf(chain, wallet.address, policy.permissions);
     draft.networks[key] = { scopeText: policy.scopeText, ...priced };
     draft.inputs[key] = input.networks[key];
   }
@@ -155,6 +168,17 @@ export async function grantDraft(ctx: Pick<AdminCtx, "store" | "mode">, input: {
 
 function adminSigner(wallet: WalletRecord, fns: ReturnType<typeof webAuthnFns>) {
   return signerFromPasskey(wallet.credential, { webAuthn: fns });
+}
+
+/** How many passkey approvals an activation takes, as a sentence for the approval page. */
+function approvalsText(mode: Mode, draft: any, keys: NetworkKey[]): string {
+  const counts = keys.map((k) => {
+    const chain = chainFor(mode, k);
+    return { name: chain.name, n: planStages(compilePolicy(chain, draft.inputs[k], draft.expiry).permissions, chain.storageBudget).length };
+  });
+  if (counts.every((c) => c.n === 1)) return "You will approve with your passkey once per network.";
+  const total = counts.reduce((sum, c) => sum + c.n, 0);
+  return `You will approve with your passkey ${total} times: ${counts.map((c) => `${c.n} for ${c.name}`).join(", ")}.`;
 }
 
 type Leg = { network: NetworkKey; status: "confirmed" | "failed"; txUrl: string | null; keystoreKeyUrl: string | null; charged: string | null; nativeSymbol: string; error: string | null };
@@ -180,7 +204,7 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
         let record = ctx.store.session(chain.chainId);
         // The Keystore fee is paid from the wallet, so the balance is checked before anything is signed.
         if (!(record?.status === "active" && record.draftId === draft.id)) {
-          const priced = await costOf(chain, wallet.address, policy.permissions.calls!.length, policy.permissions.spend!.length);
+          const priced = await costOf(chain, wallet.address, policy.permissions);
           if (priced.balanceRaw < priced.keystoreFeeRaw) {
             throw new CliError("INSUFFICIENT_FUNDS", `The wallet holds ${priced.balance} ${chain.nativeSymbol} on ${chain.name}. Activation needs about ${priced.cost.total}. Send more and activate again.`);
           }
@@ -193,12 +217,14 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
           leg.charged = record.charged;
           continue;
         }
-        if (record?.status === "active") {
+        // A session that was only partly granted under an older review holds some permissions onchain, so it is revoked too.
+        const halfGranted = record?.status === "pending" && (record.stagesDone ?? 0) > 0 && record.draftId !== draft.id;
+        if (record?.status === "active" || halfGranted) {
           ctx.job.step(`Revoking the current session on ${chain.name}`);
           say(`Revoke the agent's current session on ${chain.name} before the new one replaces it.`);
           const res = await client.revokeSession({ wallet: { address: wallet.address }, signer, session: record.publicKey, chainId: chain.chainId });
           if (res.status === "FAILED") throw new CliError("REVOKE_FAILED", `The current session on ${chain.name} could not be revoked, so it was left in place.`);
-          record = { ...record, status: "revoked", revokeTx: res.transactionHash ?? null, revokedAt: new Date().toISOString() };
+          record = { ...record!, status: "revoked", revokeTx: res.transactionHash ?? null, revokedAt: new Date().toISOString() };
           ctx.store.saveSession(chain.chainId, record);
         }
 
@@ -222,20 +248,40 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
         }
         const sessionSigner = signerFromPrivateKey(secret);
 
+        // One grant on most networks. Where a storage budget applies, the same key is granted in stages.
+        const stages = planStages(policy.permissions, chain.storageBudget);
         const before = await nativeBalance(chain, wallet.address);
-        ctx.job.step(`Activating on ${chain.name}`);
-        say(`Activate the agent's session on ${chain.name}. ${policy.scopeText.slice(4, 6).join(" ")} ${policy.scopeText.at(-1)}`);
-        const session = await client.grantSession({
-          wallet: { address: wallet.address }, signer, permissions: policy.permissions, expiry: draft.expiry, sessionSigner, register: true, chainId: chain.chainId,
-        });
+        const hashes: string[] = [...(record!.grantTxs ?? [])];
+        for (let i = record!.stagesDone ?? 0; i < stages.length; i++) {
+          const stage = stages[i];
+          const many = stages.length > 1;
+          ctx.job.step(many ? `Activating on ${chain.name}, step ${i + 1} of ${stages.length}` : `Activating on ${chain.name}`);
+          say(`Activate the agent's session on ${chain.name}. ${policy.scopeText.slice(4, 6).join(" ")} ${policy.scopeText.at(-1)}${many ? ` Approval ${i + 1} of ${stages.length} on this network.` : ""}`);
+          try {
+            const granted = await client.grantSession({
+              wallet: { address: wallet.address }, signer, permissions: { calls: stage.calls, spend: stage.spend }, expiry: draft.expiry, sessionSigner, register: stage.register, chainId: chain.chainId,
+            });
+            if (granted.transactionHash) hashes.push(granted.transactionHash);
+          } catch (e) {
+            if (!many) throw e;
+            const f = decodeFailure(e);
+            ctx.log(`activate ${chain.name} step ${i + 1} failed: ${f.raw}`);
+            const why = f.code === "RELAY_REJECTED" ? relayDropped(chain.relayNote) : f.message;
+            throw new CliError("STAGE_FAILED", `Step ${i + 1} of ${stages.length} on ${chain.name} did not go through. ${why} Activate again to continue from this step.`);
+          }
+          record = { ...record!, stagesDone: i + 1, grantTxs: hashes };
+          ctx.store.saveSession(chain.chainId, record);
+        }
         const after = await nativeBalance(chain, wallet.address);
         const charged = before > after ? formatUnits(before - after, 18) : "0";
+        // The stored session carries the whole scope, whatever the stages were.
+        const session = { walletAddress: wallet.address, signer: sessionSigner, publicKey: sessionSigner.publicKey, permissions: policy.permissions, expiry: draft.expiry };
         const active: SessionRecord = {
-          ...record!, status: "active", serialized: serializeSession(session), grantTx: session.transactionHash ?? null, grantedAt: new Date().toISOString(), charged,
+          ...record!, status: "active", serialized: serializeSession(session as any), grantTx: hashes.at(-1) ?? null, grantTxs: hashes, grantedAt: new Date().toISOString(), charged,
         };
         ctx.store.saveSession(chain.chainId, active);
         leg.status = "confirmed";
-        leg.txUrl = session.transactionHash ? txUrl(chain, session.transactionHash) : null;
+        leg.txUrl = active.grantTx ? txUrl(chain, active.grantTx) : null;
         leg.keystoreKeyUrl = keystoreKeyUrl(chain, active.keyId);
         leg.charged = charged;
       } catch (e) {
@@ -245,7 +291,7 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
       }
     }
     return out;
-  }, `Hermes is about to activate the agent's session on ${keys.map((k) => chainFor(ctx.mode, k).name).join(" and ")}. You will approve with your passkey once per network. Continue when you are ready.`);
+  }, `Hermes is about to activate the agent's session on ${keys.map((k) => chainFor(ctx.mode, k).name).join(" and ")}. ${approvalsText(ctx.mode, draft, keys)} Continue when you are ready.`);
   return { legs };
 }
 
