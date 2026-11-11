@@ -344,13 +344,15 @@ export function describe(chain: Chain, wallet: Address, calls: Call[], opts: { s
     ruleKey = `sovereign:${chain.chainId}:${opts.keyId8}:swap:${swaps[0].tin.symbol}:${swaps[0].tout.symbol}`;
   }
 
-  let sentence = `On ${chain.name}, from wallet ${short(wallet)}: ${parts.join("; ")}.`;
-  if (approvals.length) sentence += ` Exact approvals in this batch: ${approvals.join(", ")}. The wallet clears them when the batch ends.`;
-  if (kind === "raw") sentence += " The session does not cover this call, so the wallet's onchain policy is expected to refuse it.";
-  else sentence += " Everything this batch produces stays in the wallet.";
-  if (opts.sessionStatus === "revoked") sentence += " This session was revoked, so the wallet is expected to refuse the batch.";
-  if (kind === "lp") sentence += ` Always lets the agent run future batches for this pool on ${chain.name} without asking, within the onchain caps, until this session is revoked or replaced.`;
-  if (kind === "swap") sentence += ` Always lets the agent repeat this swap direction on ${chain.name} without asking, within the onchain caps, until this session is revoked or replaced.`;
+  // One statement per line: the approval prompt keeps line breaks, and a wall of text is hard to check.
+  const step = (text: string) => `  ${parts.length > 1 ? "- " : ""}${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+  let sentence = `On ${chain.name}, from wallet ${short(wallet)}:\n${parts.map(step).join("\n")}`;
+  if (approvals.length) sentence += `\nExact approvals in this batch: ${approvals.join(", ")}. The wallet clears them when the batch ends.`;
+  if (kind === "raw") sentence += "\nThe session does not cover this call, so the wallet's onchain policy is expected to refuse it.";
+  else sentence += "\nEverything this batch produces stays in the wallet.";
+  if (opts.sessionStatus === "revoked") sentence += "\nThis session was revoked, so the wallet is expected to refuse the batch.";
+  if (kind === "lp") sentence += `\nAlways lets the agent run future batches for this pool on ${chain.name} without asking, within the onchain caps, until this session is revoked or replaced.`;
+  if (kind === "swap") sentence += `\nAlways lets the agent repeat this swap direction on ${chain.name} without asking, within the onchain caps, until this session is revoked or replaced.`;
 
   return { sentence, ruleKey, kind, violations, parts };
 }

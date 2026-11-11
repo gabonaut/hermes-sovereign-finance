@@ -305,9 +305,22 @@ export async function lpPlan(chain: Chain, wallet: Address, input: any) {
   const liquidity = liquidityForAmounts(sqrtForMint, lo, hi, h0, h1);
   if (liquidity === 0n) throw new CliError("BAD_INPUT", "The budget is too small to mint any liquidity in this range.");
   const [u0, u1] = amountsForLiquidity(sqrtForMint, lo, hi, liquidity);
+  // The mint's minimums allow the price to move by the slippage either way before it lands. Inside a
+  // narrow range a small price move shifts the two amounts a lot, so the minimums are what the mint
+  // would take at each end of that move, not a flat cut of today's amounts.
+  const shifted = (up: boolean) => {
+    const factor = Math.sqrt(1 + (up ? 1 : -1) * Number(slippage) / 10_000);
+    const sqrtAt = (sqrtForMint * BigInt(Math.round(factor * 1e9))) / 1_000_000_000n;
+    return amountsForLiquidity(sqrtAt, lo, hi, liquidityForAmounts(sqrtAt, lo, hi, h0, h1));
+  };
+  const [up0, up1] = shifted(true);
+  const [down0, down1] = shifted(false);
+  const least = (...xs: bigint[]) => xs.reduce((a, b) => (b < a ? b : a));
+  const min0 = less(least(u0, up0, down0), 30n);
+  const min1 = less(least(u1, up1, down1), 30n);
   actions.push({
     type: "mint", token0: t0.symbol, token1: t1.symbol, fee, tickLower: lo, tickUpper: hi,
-    amount0Desired: text(h0, t0), amount1Desired: text(h1, t1), amount0Min: text(less(u0, slippage), t0), amount1Min: text(less(u1, slippage), t1),
+    amount0Desired: text(h0, t0), amount1Desired: text(h1, t1), amount0Min: text(min0, t0), amount1Min: text(min1, t1),
   });
 
   const { invert, unit } = orient(t0, t1);

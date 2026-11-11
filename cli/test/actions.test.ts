@@ -29,7 +29,7 @@ test("enter batch: exact approvals sit right before their use, recipients are th
   assert.deepEqual(d.violations, []);
   assert.equal(d.kind, "lp");
   assert.equal(d.ruleKey, `sovereign:97:abcd1234:lp:${poolAddress(chain, wbnb.address, usdt.address, 500).toLowerCase()}`);
-  assert.match(d.sentence, /On BNB Chain testnet, from wallet 0x1111\.\.\.1111: wrap 0\.05 tBNB; swap 0\.025 WBNB for at least 1 USDT/);
+  assert.match(d.sentence, /On BNB Chain testnet, from wallet 0x1111\.\.\.1111:\n  - Wrap 0\.05 tBNB\n  - Swap 0\.025 WBNB for at least 1 USDT/);
   assert.match(d.sentence, /Exact approvals in this batch/);
   assert.match(d.sentence, /Always lets the agent run future batches for this pool/);
 });
@@ -53,7 +53,7 @@ test("a raw transfer is described from its calldata and never gets a reusable ke
   const b = describe(chain, wallet, calls, opts);
   assert.equal(a.kind, "raw");
   assert.deepEqual(a.violations, []);
-  assert.match(a.sentence, /transfer 5 USDT to 0x2222222222222222222222222222222222222222/);
+  assert.match(a.sentence, /Transfer 5 USDT to 0x2222222222222222222222222222222222222222/);
   assert.match(a.sentence, /expected to refuse it/);
   assert.match(a.ruleKey, /^sovereign:97:once:/);
   assert.notEqual(a.ruleKey, b.ruleKey);
@@ -82,7 +82,7 @@ test("an unknown position never gets a reusable key; a cached one does", () => {
   assert.match(describe(chain, wallet, calls, opts).ruleKey, /:once:/);
   const known = describe(chain, wallet, calls, { ...opts, positions: { "42": { token0: t0.address, token1: t1.address, fee: 500, tickLower: -60000, tickUpper: -50000, liquidity: "1000" } } });
   assert.equal(known.kind, "lp");
-  assert.match(known.sentence, /remove all liquidity from position #42 \((WBNB\/USDT|USDT\/WBNB) 0\.05%\)/);
+  assert.match(known.sentence, /Remove all liquidity from position #42 \((WBNB\/USDT|USDT\/WBNB) 0\.05%\)/);
 });
 
 test("bad actions are refused before anything is encoded", () => {
@@ -102,7 +102,7 @@ test("Uniswap batches use the SwapRouter02 struct", () => {
   const sepScope = compilePolicy(sep, { nativeCap: "0.05", tokens: [{ symbol: "WETH", cap: "0.1" }, { symbol: "USDC", cap: "200" }] }, 1800000000).scope;
   const d = describe(sep, wallet, calls, { scope: sepScope, keyId8: "abcd1234", positions: {} });
   assert.deepEqual(d.violations, []);
-  assert.match(d.sentence, /swap 0\.01 WETH for at least 1 USDC on Uniswap V3 \(0\.05% pool\)/);
+  assert.match(d.sentence, /Swap 0\.01 WETH for at least 1 USDC on Uniswap V3 \(0\.05% pool\)/);
 });
 
 test("a transfer action encodes a plain token or native send, which the V3 LP scope does not cover", () => {
@@ -112,8 +112,8 @@ test("a transfer action encodes a plain token or native send, which the V3 LP sc
   const d = describe(chain, wallet, token, opts);
   assert.equal(d.kind, "raw");
   assert.deepEqual(d.violations, []);
-  assert.match(d.sentence, /transfer 5 USDT to 0x2222222222222222222222222222222222222222\. The session does not cover this call/);
+  assert.match(d.sentence, /Transfer 5 USDT to 0x2222222222222222222222222222222222222222\nThe session does not cover this call/);
   const coin = compile(chain, wallet, [{ type: "transfer", token: "tBNB", to: other, amount: "0.01" }], 1);
   assert.deepEqual(coin, [{ to: other, data: "0x", value: 10n ** 16n }]);
-  assert.match(describe(chain, wallet, coin, opts).sentence, /send 0\.01 tBNB to 0x2222222222222222222222222222222222222222/);
+  assert.match(describe(chain, wallet, coin, opts).sentence, /Send 0\.01 tBNB to 0x2222222222222222222222222222222222222222/);
 });
