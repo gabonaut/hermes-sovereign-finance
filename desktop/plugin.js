@@ -623,7 +623,6 @@ function createStore(ctx) {
   let lastStart = 0;
   let pollMs = 0;
   let stopPoll = null;
-  let paneVisible = true;
   const set = (patch) => {
     let changed = false;
     for (const key of Object.keys(patch)) {
@@ -634,7 +633,7 @@ function createStore(ctx) {
     listeners.forEach((listener) => listener());
   };
   const documentVisible = () => typeof document === "undefined" || document.visibilityState !== "hidden";
-  const isActive = () => probes.size > 0 && paneVisible && documentVisible();
+  const isActive = () => probes.size > 0 && documentVisible();
   const onScreen = () => {
     for (const probe of probes) {
       try {
@@ -702,7 +701,7 @@ function createStore(ctx) {
     pollMs = want;
     if (want > 0) {
       stopPoll = ctx.setInterval(() => {
-        if (isActive() && onScreen()) void refresh();
+        if (isActive() && (snapshot.state === null || onScreen())) void refresh();
       }, want);
     }
   };
@@ -761,13 +760,7 @@ function createStore(ctx) {
   try {
     const visibility = typeof host.paneVisibility === "function" ? host.paneVisibility(`${PLUGIN_ID}:${PANE_ID}`) : null;
     if (visibility) {
-      paneVisible = visibility.get() !== false;
-      ctx.onDispose(
-        visibility.listen((value) => {
-          paneVisible = value !== false;
-          onActivityChange();
-        })
-      );
+      ctx.onDispose(visibility.listen(() => onActivityChange()));
     }
   } catch {
   }
