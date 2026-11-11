@@ -33,7 +33,12 @@ const NOTE = {
   failed: 'Open a chat first, then press the button again.'
 } as const
 
-export function Plays({ network }: { network: NetworkState }) {
+/**
+ * `stage` is where the wallet stands on this network. At "start" it holds no position, so the plays
+ * are the next step and are shown as one: first in the card, tinted, with a filled button. Once it
+ * holds one they are follow-ups and sit under the positions.
+ */
+export function Plays({ network, stage }: { network: NetworkState; stage: 'start' | 'holding' }) {
   const uid = useId()
   const defaults = defaultsFor(network)
   const [amount, setAmount] = useState(defaults.amount)
@@ -54,13 +59,13 @@ export function Plays({ network }: { network: NetworkState }) {
   }
 
   return (
-    <section className="sf-plays">
+    <section className="sf-plays" data-stage={stage}>
       <div className="sf-plays-head">
-        <span className="sf-strong">Ask the agent</span>
+        <span className="sf-strong">{stage === 'start' ? 'Next: put the agent to work' : 'Ask the agent'}</span>
         <span className="sf-hint">A button writes the request into the chat box. You send it.</span>
       </div>
       <ul className="sf-play-list">
-        {PLAYS.map(play => (
+        {PLAYS.filter(play => play.when === 'both' || play.when === stage).map(play => (
           <li className="sf-play" key={play.id}>
             <div className="sf-play-text">
               <span className="sf-play-title">{play.title}</span>
@@ -94,7 +99,13 @@ export function Plays({ network }: { network: NetworkState }) {
             </div>
             <div className="sf-play-actions">
               {play.actions.map(action => (
-                <Button key={action.label} onClick={() => void run(play, action.request)} size="sm" type="button" variant="outline">
+                <Button
+                  key={action.label}
+                  onClick={() => void run(play, action.request)}
+                  size="sm"
+                  type="button"
+                  variant={stage === 'start' && play.id === 'open' ? 'default' : 'outline'}
+                >
                   {action.label}
                 </Button>
               ))}
