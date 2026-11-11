@@ -276,6 +276,7 @@ interface StateOptions {
   ethereum?: NetworkPatch
   job?: Job | null
   draft?: Draft | null
+  others?: string[]
 }
 
 function state(now: number, opts: StateOptions = {}): WalletState {
@@ -287,7 +288,8 @@ function state(now: number, opts: StateOptions = {}): WalletState {
     networks: [network(mode, 'bnb', now, wallet, opts.bnb), network(mode, 'ethereum', now, wallet, opts.ethereum)],
     job: opts.job ?? null,
     preset: presetFor(mode),
-    draft: opts.draft ?? null
+    draft: opts.draft ?? null,
+    otherWallets: (opts.others ?? []).map(address => ({ address, setAsideAt: iso(now - 3 * MINUTE) }))
   }
 }
 
@@ -317,6 +319,12 @@ export const FIXTURES: Fixture[] = [
     title: 'No wallet',
     core: true,
     state: now => state(now, { wallet: false })
+  },
+  {
+    id: 'no-wallet-earlier',
+    title: 'No wallet, one set aside',
+    core: false,
+    state: now => state(now, { wallet: false, others: [fakeHex('earlier', 40)] })
   },
   {
     id: 'unfunded',

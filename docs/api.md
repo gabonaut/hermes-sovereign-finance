@@ -11,6 +11,8 @@ GET  /state                                                         -> data: Sta
 POST /mode         {"mode": "testnet" | "mainnet"}                  -> data: {}
 POST /create       {}                                               -> data: {"jobId": string}
 POST /recover      {}                                               -> data: {"jobId": string}
+POST /wallet/set-aside {}                                          -> data: {"address": string}
+POST /wallet/use   {"address": string}                              -> data: {"address": string}
 POST /grant        GrantRequest                                     -> data: {"draft": Draft}
 POST /activate     {"draftId": string, "networks": NetworkKey[]}    -> data: {"jobId": string}
 POST /revoke       {"network": NetworkKey}                          -> data: {"jobId": string}

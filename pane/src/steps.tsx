@@ -1,10 +1,10 @@
 import { Badge, Button, CopyButton, Skeleton } from '@hermes/plugin-sdk'
-import { type ReactNode, useId } from 'react'
+import { type ReactNode, useId, useState } from 'react'
 
-import { isPositive, parseTime, shortHex, timeAgo } from './format'
+import { displayAmount, isPositive, parseTime, shortHex, timeAgo } from './format'
 import { IconCheck, IconChevron } from './icons'
 import { QrCode } from './qr'
-import type { NetworkState } from './types'
+import type { NetworkState, OtherWallet } from './types'
 import { ExtLink, Hex, InlineError, Num, useAction, usePane, Warning } from './ui'
 
 export type StepStatus = 'done' | 'current' | 'todo' | 'locked'
@@ -74,22 +74,127 @@ function GroupedAddress({ value }: { value: string }) {
   )
 }
 
-export function WalletStep({ address }: { address: string | null }) {
+interface WalletStepProps {
+  address: string | null
+  networks: NetworkState[]
+  others: OtherWallet[]
+  /** Called after the wallet in use changed, so anything reviewed for the old one is dropped. */
+  onSwitched: () => void
+}
+
+/** Wallets set aside earlier. Picking one needs no passkey: the record holds public data only. */
+function EarlierWallets({ others, disabled, onUse }: { others: OtherWallet[]; disabled: boolean; onUse: (address: string) => void }) {
+  if (others.length === 0) return null
+  return (
+    <div className="sf-earlier">
+      <h3 className="sf-earlier-title">Earlier wallets</h3>
+      <ul className="sf-earlier-list">
+        {others.map(w => (
+          <li key={w.address}>
+            <span className="sf-mono" title={w.address}>
+              {shortHex(w.address, 8, 6)}
+            </span>
+            <Button disabled={disabled} onClick={() => onUse(w.address)} size="xs" type="button" variant="outline">
+              Use
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** What the user leaves behind at this address, in their own terms. */
+function leftBehind(networks: NetworkState[]): string[] {
+  const lines: string[] = []
+  const held = networks.flatMap(n => {
+    const b = n.balances
+    if (!b) return []
+    const parts = [isPositive(b.native) ? `${displayAmount(b.native)} ${n.nativeSymbol}` : '', ...b.tokens.filter(t => isPositive(t.amount)).map(t => `${displayAmount(t.amount)} ${t.symbol}`)].filter(Boolean)
+    return parts.length ? [`${parts.join(', ')} on ${n.name}`] : []
+  })
+  if (held.length) lines.push(`It holds ${held.join(' and ')}. Funds stay at this address. Withdraw them first, or come back to this wallet for them.`)
+  const open = networks.filter(n => n.positions.length > 0).map(n => n.name)
+  if (open.length) lines.push(`It has an open position on ${open.join(' and ')}. The position stays in this wallet.`)
+  const live = networks.filter(n => n.session?.status === 'active').map(n => n.name)
+  if (live.length) lines.push(`The agent can still act for this wallet on ${live.join(' and ')} until you revoke that session or it expires. Revoke first to end it now.`)
+  return lines
+}
+
+export function WalletStep({ address, networks, others, onSwitched }: WalletStepProps) {
   const { store, locked } = usePane()
   const create = useAction()
   const recover = useAction()
+  const change = useAction()
+  const [switching, setSwitching] = useState(false)
+
+  const use = (target: string) =>
+    void change.run(async () => {
+      await store.post('/wallet/use', { address: target })
+      setSwitching(false)
+      onSwitched()
+    })
 
   if (address) {
+    const warnings = switching ? leftBehind(networks) : []
     return (
-      <div className="sf-wallet">
-        <div className="sf-wallet-main">
-          <GroupedAddress value={address} />
-          <CopyButton buttonSize="xs" buttonVariant="outline" label="Copy address" text={address}>
-            Copy address
-          </CopyButton>
+      <>
+        <div className="sf-wallet">
+          <div className="sf-wallet-main">
+            <GroupedAddress value={address} />
+            <CopyButton buttonSize="xs" buttonVariant="outline" label="Copy address" text={address}>
+              Copy address
+            </CopyButton>
+          </div>
+          <QrCode className="sf-qr" label="QR code of the wallet address" value={address} />
         </div>
-        <QrCode className="sf-qr" label="QR code of the wallet address" value={address} />
-      </div>
+        {switching ? (
+          <div className="sf-switch">
+            <h3 className="sf-switch-title">Use another wallet</h3>
+            {warnings.map(line => (
+              <Warning key={line}>{line}</Warning>
+            ))}
+            <p className="sf-copy">
+              This wallet is set aside, not deleted. To return to it, pick it under Earlier wallets or use Recover from passkey.
+            </p>
+            <EarlierWallets disabled={locked || change.busy} onUse={use} others={others} />
+            <div className="sf-actions">
+              <Button
+                disabled={locked}
+                loading={change.busy}
+                onClick={() =>
+                  void change.run(async () => {
+                    await store.post('/wallet/set-aside', {})
+                    setSwitching(false)
+                    onSwitched()
+                  })
+                }
+                size="sm"
+                type="button"
+              >
+                Set aside and start a new one
+              </Button>
+              <Button
+                disabled={change.busy}
+                onClick={() => {
+                  change.clear()
+                  setSwitching(false)
+                }}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Cancel
+              </Button>
+            </div>
+            {change.error ? <InlineError>{change.error}</InlineError> : null}
+          </div>
+        ) : (
+          <button className="sf-link sf-switch-open" disabled={locked} onClick={() => setSwitching(true)} type="button">
+            Use another wallet
+          </button>
+        )}
+      </>
     )
   }
 
@@ -98,7 +203,7 @@ export function WalletStep({ address }: { address: string | null }) {
       <p className="sf-copy">The admin key is a passkey that stays on your device.</p>
       <div className="sf-actions">
         <Button
-          disabled={locked || recover.busy}
+          disabled={locked || recover.busy || change.busy}
           loading={create.busy}
           onClick={() => {
             recover.clear()
@@ -110,7 +215,7 @@ export function WalletStep({ address }: { address: string | null }) {
           Create Smart Agentic Wallet
         </Button>
         <Button
-          disabled={locked || create.busy}
+          disabled={locked || create.busy || change.busy}
           loading={recover.busy}
           onClick={() => {
             create.clear()
@@ -125,6 +230,8 @@ export function WalletStep({ address }: { address: string | null }) {
       </div>
       {create.error ? <InlineError>{create.error}</InlineError> : null}
       {recover.error ? <InlineError>{recover.error}</InlineError> : null}
+      <EarlierWallets disabled={locked || create.busy || recover.busy || change.busy} onUse={use} others={others} />
+      {change.error ? <InlineError>{change.error}</InlineError> : null}
     </>
   )
 }

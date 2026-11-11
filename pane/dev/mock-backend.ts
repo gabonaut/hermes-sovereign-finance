@@ -295,6 +295,33 @@ export function createMockBackend({ fixture, now, latency, log }: Options): Mock
         return ok({ jobId })
       }
 
+      case '/wallet/set-aside': {
+        if (!s.wallet) return fail('NO_WALLET', 'There is no wallet in use.')
+        state = {
+          ...s,
+          wallet: null,
+          draft: null,
+          job: null,
+          otherWallets: [{ address: s.wallet.address, setAsideAt: new Date().toISOString() }, ...s.otherWallets],
+          networks: s.networks.map(n => ({ ...n, addressUrl: null, keystoreAccountUrl: null, asOf: null, balances: null, session: null, positions: [] }))
+        }
+        return ok({})
+      }
+
+      case '/wallet/use': {
+        const target = s.otherWallets.find(w => w.address === body.address)
+        if (!target) return fail('NO_WALLET', 'That wallet is not among the ones set aside here.')
+        const rest = s.otherWallets.filter(w => w !== target)
+        state = {
+          ...s,
+          wallet: { address: target.address },
+          draft: null,
+          otherWallets: s.wallet ? [{ address: s.wallet.address, setAsideAt: new Date().toISOString() }, ...rest] : rest,
+          networks: s.networks.map(n => ({ ...n, asOf: new Date().toISOString(), balances: { native: '0', tokens: [] }, session: null, positions: [] }))
+        }
+        return ok({})
+      }
+
       case '/job/dismiss':
       case '/job/cancel':
         stop()

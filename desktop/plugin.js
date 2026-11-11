@@ -5,7 +5,7 @@
 
 // src/app.tsx
 import { Button as Button7, ErrorState, Skeleton as Skeleton3 } from "@hermes/plugin-sdk";
-import { useCallback as useCallback2, useEffect as useEffect3, useMemo as useMemo2, useRef as useRef3, useState as useState7, useSyncExternalStore } from "react";
+import { useCallback as useCallback2, useEffect as useEffect3, useMemo as useMemo2, useRef as useRef3, useState as useState8, useSyncExternalStore } from "react";
 
 // src/format.ts
 var ELLIPSIS = "\u2026";
@@ -617,7 +617,12 @@ function normalizeState(v) {
     networks: list(d.networks).map(network).filter((n) => n !== null),
     job: job(d.job),
     preset: preset(d.preset),
-    draft: normalizeDraft(d.draft)
+    draft: normalizeDraft(d.draft),
+    otherWallets: list(d.otherWallets).map((w) => {
+      const o = dict(w);
+      const a = o ? text(o.address).trim() : "";
+      return a ? { address: a, setAsideAt: o && typeof o.setAsideAt === "string" ? o.setAsideAt : null } : null;
+    }).filter((w) => w !== null)
   };
 }
 
@@ -1622,7 +1627,7 @@ function activateSummary(networks) {
 
 // src/steps.tsx
 import { Badge as Badge5, Button as Button5, CopyButton as CopyButton3, Skeleton as Skeleton2 } from "@hermes/plugin-sdk";
-import { useId as useId3 } from "react";
+import { useId as useId3, useState as useState6 } from "react";
 
 // src/qr.tsx
 import { useMemo } from "react";
@@ -2351,17 +2356,90 @@ function GroupedAddress({ value }) {
   for (let i = 6; i < value.length; i += 4) groups.push(value.slice(i, i + 4));
   return /* @__PURE__ */ jsx9("span", { className: "sf-address", children: groups.map((group, i) => /* @__PURE__ */ jsx9("span", { children: group }, i)) });
 }
-function WalletStep({ address }) {
+function EarlierWallets({ others, disabled, onUse }) {
+  if (others.length === 0) return null;
+  return /* @__PURE__ */ jsxs9("div", { className: "sf-earlier", children: [
+    /* @__PURE__ */ jsx9("h3", { className: "sf-earlier-title", children: "Earlier wallets" }),
+    /* @__PURE__ */ jsx9("ul", { className: "sf-earlier-list", children: others.map((w) => /* @__PURE__ */ jsxs9("li", { children: [
+      /* @__PURE__ */ jsx9("span", { className: "sf-mono", title: w.address, children: shortHex(w.address, 8, 6) }),
+      /* @__PURE__ */ jsx9(Button5, { disabled, onClick: () => onUse(w.address), size: "xs", type: "button", variant: "outline", children: "Use" })
+    ] }, w.address)) })
+  ] });
+}
+function leftBehind(networks) {
+  const lines2 = [];
+  const held = networks.flatMap((n) => {
+    const b = n.balances;
+    if (!b) return [];
+    const parts = [isPositive(b.native) ? `${displayAmount(b.native)} ${n.nativeSymbol}` : "", ...b.tokens.filter((t) => isPositive(t.amount)).map((t) => `${displayAmount(t.amount)} ${t.symbol}`)].filter(Boolean);
+    return parts.length ? [`${parts.join(", ")} on ${n.name}`] : [];
+  });
+  if (held.length) lines2.push(`It holds ${held.join(" and ")}. Funds stay at this address. Withdraw them first, or come back to this wallet for them.`);
+  const open = networks.filter((n) => n.positions.length > 0).map((n) => n.name);
+  if (open.length) lines2.push(`It has an open position on ${open.join(" and ")}. The position stays in this wallet.`);
+  const live = networks.filter((n) => n.session?.status === "active").map((n) => n.name);
+  if (live.length) lines2.push(`The agent can still act for this wallet on ${live.join(" and ")} until you revoke that session or it expires. Revoke first to end it now.`);
+  return lines2;
+}
+function WalletStep({ address, networks, others, onSwitched }) {
   const { store, locked } = usePane();
   const create = useAction();
   const recover = useAction();
+  const change = useAction();
+  const [switching, setSwitching] = useState6(false);
+  const use = (target) => void change.run(async () => {
+    await store.post("/wallet/use", { address: target });
+    setSwitching(false);
+    onSwitched();
+  });
   if (address) {
-    return /* @__PURE__ */ jsxs9("div", { className: "sf-wallet", children: [
-      /* @__PURE__ */ jsxs9("div", { className: "sf-wallet-main", children: [
-        /* @__PURE__ */ jsx9(GroupedAddress, { value: address }),
-        /* @__PURE__ */ jsx9(CopyButton3, { buttonSize: "xs", buttonVariant: "outline", label: "Copy address", text: address, children: "Copy address" })
+    const warnings = switching ? leftBehind(networks) : [];
+    return /* @__PURE__ */ jsxs9(Fragment3, { children: [
+      /* @__PURE__ */ jsxs9("div", { className: "sf-wallet", children: [
+        /* @__PURE__ */ jsxs9("div", { className: "sf-wallet-main", children: [
+          /* @__PURE__ */ jsx9(GroupedAddress, { value: address }),
+          /* @__PURE__ */ jsx9(CopyButton3, { buttonSize: "xs", buttonVariant: "outline", label: "Copy address", text: address, children: "Copy address" })
+        ] }),
+        /* @__PURE__ */ jsx9(QrCode2, { className: "sf-qr", label: "QR code of the wallet address", value: address })
       ] }),
-      /* @__PURE__ */ jsx9(QrCode2, { className: "sf-qr", label: "QR code of the wallet address", value: address })
+      switching ? /* @__PURE__ */ jsxs9("div", { className: "sf-switch", children: [
+        /* @__PURE__ */ jsx9("h3", { className: "sf-switch-title", children: "Use another wallet" }),
+        warnings.map((line) => /* @__PURE__ */ jsx9(Warning, { children: line }, line)),
+        /* @__PURE__ */ jsx9("p", { className: "sf-copy", children: "This wallet is set aside, not deleted. To return to it, pick it under Earlier wallets or use Recover from passkey." }),
+        /* @__PURE__ */ jsx9(EarlierWallets, { disabled: locked || change.busy, onUse: use, others }),
+        /* @__PURE__ */ jsxs9("div", { className: "sf-actions", children: [
+          /* @__PURE__ */ jsx9(
+            Button5,
+            {
+              disabled: locked,
+              loading: change.busy,
+              onClick: () => void change.run(async () => {
+                await store.post("/wallet/set-aside", {});
+                setSwitching(false);
+                onSwitched();
+              }),
+              size: "sm",
+              type: "button",
+              children: "Set aside and start a new one"
+            }
+          ),
+          /* @__PURE__ */ jsx9(
+            Button5,
+            {
+              disabled: change.busy,
+              onClick: () => {
+                change.clear();
+                setSwitching(false);
+              },
+              size: "sm",
+              type: "button",
+              variant: "outline",
+              children: "Cancel"
+            }
+          )
+        ] }),
+        change.error ? /* @__PURE__ */ jsx9(InlineError, { children: change.error }) : null
+      ] }) : /* @__PURE__ */ jsx9("button", { className: "sf-link sf-switch-open", disabled: locked, onClick: () => setSwitching(true), type: "button", children: "Use another wallet" })
     ] });
   }
   return /* @__PURE__ */ jsxs9(Fragment3, { children: [
@@ -2370,7 +2448,7 @@ function WalletStep({ address }) {
       /* @__PURE__ */ jsx9(
         Button5,
         {
-          disabled: locked || recover.busy,
+          disabled: locked || recover.busy || change.busy,
           loading: create.busy,
           onClick: () => {
             recover.clear();
@@ -2384,7 +2462,7 @@ function WalletStep({ address }) {
       /* @__PURE__ */ jsx9(
         Button5,
         {
-          disabled: locked || create.busy,
+          disabled: locked || create.busy || change.busy,
           loading: recover.busy,
           onClick: () => {
             create.clear();
@@ -2398,7 +2476,9 @@ function WalletStep({ address }) {
       )
     ] }),
     create.error ? /* @__PURE__ */ jsx9(InlineError, { children: create.error }) : null,
-    recover.error ? /* @__PURE__ */ jsx9(InlineError, { children: recover.error }) : null
+    recover.error ? /* @__PURE__ */ jsx9(InlineError, { children: recover.error }) : null,
+    /* @__PURE__ */ jsx9(EarlierWallets, { disabled: locked || create.busy || recover.busy || change.busy, onUse: use, others }),
+    change.error ? /* @__PURE__ */ jsx9(InlineError, { children: change.error }) : null
   ] });
 }
 var walletSummary = (address) => address ? /* @__PURE__ */ jsx9("span", { className: "sf-mono", children: shortHex(address) }) : null;
@@ -2586,6 +2666,13 @@ button.sf-step-head:hover .sf-step-caret{color:var(--sf-fg)}
 
 /* Step 1 */
 .sf-wallet{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.sf-switch-open{margin-top:10px}
+.sf-switch-open:disabled{opacity:.5;cursor:default}
+.sf-switch{display:flex;flex-direction:column;gap:10px;margin-top:12px;padding:12px;border:1px solid var(--sf-line);border-radius:6px;background:var(--sf-wash)}
+.sf-switch-title,.sf-earlier-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--sf-fg2)}
+.sf-earlier{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.sf-earlier-list{display:flex;flex-direction:column;gap:6px;margin:0;padding:0}
+.sf-earlier-list > li{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0;padding:0;list-style:none}
 .sf-wallet-main{display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0}
 .sf-address{display:block;max-width:25ch;font-family:var(--sf-mono);font-size:12px;font-variant-ligatures:none;line-height:1.6;-webkit-user-select:text;user-select:text}
 .sf-address span{display:inline-block;margin-right:.45ch}
@@ -2743,7 +2830,7 @@ import {
   Input as Input3,
   SegmentedControl as SegmentedControl3
 } from "@hermes/plugin-sdk";
-import { useEffect as useEffect2, useId as useId4, useRef as useRef2, useState as useState6 } from "react";
+import { useEffect as useEffect2, useId as useId4, useRef as useRef2, useState as useState7 } from "react";
 import { jsx as jsx10, jsxs as jsxs10 } from "react/jsx-runtime";
 function assetsOf(network2) {
   if (!network2) return [];
@@ -2763,11 +2850,11 @@ function WithdrawDialog(props) {
 function WithdrawForm({ onClose, address, networks, send }) {
   const { store } = usePane();
   const uid = useId4();
-  const [networkKey, setNetworkKey] = useState6(() => (networks.find(hasFunds) ?? networks[0])?.key ?? "");
-  const [symbol, setSymbol] = useState6(null);
-  const [amount, setAmount] = useState6("");
-  const [to, setTo] = useState6("");
-  const [attempted, setAttempted] = useState6(false);
+  const [networkKey, setNetworkKey] = useState7(() => (networks.find(hasFunds) ?? networks[0])?.key ?? "");
+  const [symbol, setSymbol] = useState7(null);
+  const [amount, setAmount] = useState7("");
+  const [to, setTo] = useState7("");
+  const [attempted, setAttempted] = useState7(false);
   const amountRef = useRef2(null);
   const network2 = networks.find((n) => n.key === networkKey);
   const assets = assetsOf(network2);
@@ -2957,7 +3044,7 @@ function Steps({ state, draft, onDraft, onWithdraw }) {
   const isOpen = (i) => toggled[i] ?? defaults[i] ?? false;
   const toggle = (i) => () => setToggled((prev) => ({ ...prev, [i]: !(prev[i] ?? defaults[i] ?? false) }));
   return /* @__PURE__ */ jsxs11("ol", { className: "sf-steps", children: [
-    /* @__PURE__ */ jsx11(Step, { n: 1, onToggle: toggle(0), open: isOpen(0), status: statusOf2(0), summary: walletSummary(address), title: "Create Smart Agentic Wallet", children: /* @__PURE__ */ jsx11(WalletStep, { address }) }),
+    /* @__PURE__ */ jsx11(Step, { n: 1, onToggle: toggle(0), open: isOpen(0), status: statusOf2(0), summary: walletSummary(address), title: "Create Smart Agentic Wallet", children: /* @__PURE__ */ jsx11(WalletStep, { address, networks, onSwitched: () => onDraft(null), others: state.otherWallets }) }),
     /* @__PURE__ */ jsx11(
       Step,
       {
@@ -3014,10 +3101,10 @@ function Pane({ ctx, store, page = false }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { state, error, loading } = snapshot;
   const rootRef = useRef3(null);
-  const [now, setNow] = useState7(() => Date.now());
-  const [pendingMode, setPendingMode] = useState7(null);
-  const [grantDraft, setGrantDraft] = useState7(null);
-  const [withdrawing, setWithdrawing] = useState7(false);
+  const [now, setNow] = useState8(() => Date.now());
+  const [pendingMode, setPendingMode] = useState8(null);
+  const [grantDraft, setGrantDraft] = useState8(null);
+  const [withdrawing, setWithdrawing] = useState8(false);
   useEffect3(
     () => store.attach(() => {
       const el = rootRef.current;

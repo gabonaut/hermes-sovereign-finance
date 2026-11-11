@@ -20603,8 +20603,8 @@ async function browserTransport(job, log) {
 }
 
 // src/main.ts
-import fs2 from "node:fs";
-import path2 from "node:path";
+import fs3 from "node:fs";
+import path3 from "node:path";
 
 // src/admin.ts
 import crypto4 from "node:crypto";
@@ -25573,10 +25573,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path3) {
-  if (!path3)
+function getElementAtPath(obj, path4) {
+  if (!path4)
     return obj;
-  return path3.reduce((acc, key) => acc?.[key], obj);
+  return path4.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -25916,11 +25916,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path3, issues) {
+function prefixIssues(path4, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path3);
+    iss.path.unshift(path4);
     return iss;
   });
 }
@@ -26382,16 +26382,16 @@ function flattenError(error62, mapper = (issue2) => issue2.message) {
 }
 function formatError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error63, path3 = []) => {
+  const processError = (error63, path4 = []) => {
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path3, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path4, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
       } else {
-        const fullpath = [...path3, ...issue2.path];
+        const fullpath = [...path4, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -26430,17 +26430,17 @@ function formatError(error62, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error62, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error63, path3 = []) => {
+  const processError = (error63, path4 = []) => {
     var _a3;
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path3, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path4, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path4, ...issue2.path]);
       } else {
-        const fullpath = [...path3, ...issue2.path];
+        const fullpath = [...path4, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -26479,8 +26479,8 @@ function treeifyError(error62, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path3 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path3) {
+  const path4 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path4) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -42980,8 +42980,8 @@ function toValidationError(e) {
   return new ValidationError(message);
 }
 function formatIssue(issue2, level = 0) {
-  const path3 = formatPath(issue2.path);
-  const prefix = `- ${path3 ? `${path3}: ` : ""}`;
+  const path4 = formatPath(issue2.path);
+  const prefix = `- ${path4 ? `${path4}: ` : ""}`;
   const indent = "  ".repeat(level + 1);
   let message = prefix;
   switch (issue2.code) {
@@ -43100,10 +43100,10 @@ function formatIssue(issue2, level = 0) {
   }
   return message;
 }
-function formatPath(path3) {
-  if (path3.length === 0)
+function formatPath(path4) {
+  if (path4.length === 0)
     return "";
-  return "at `" + path3.map((key, index2) => {
+  return "at `" + path4.map((key, index2) => {
     if (typeof key === "number")
       return `[${key}]`;
     if (typeof key === "symbol")
@@ -47317,6 +47317,61 @@ function compilePolicy(chain, input2, expiry) {
   };
 }
 
+// src/wallets.ts
+import fs from "node:fs";
+import path from "node:path";
+var folder = (mode, address2) => `wallets/${mode}/${address2.toLowerCase()}`;
+function move(store, from28, to) {
+  if (!store.exists(from28)) return;
+  fs.mkdirSync(path.dirname(store.path(to)), { recursive: true, mode: 448 });
+  fs.renameSync(store.path(from28), store.path(to));
+}
+function listAside(store, mode) {
+  let names = [];
+  try {
+    names = fs.readdirSync(store.path("wallets", mode));
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const name of names) {
+    const rec = store.readJson(`wallets/${mode}/${name}/wallet.json`);
+    if (rec?.address) out.push({ address: rec.address, setAsideAt: rec.setAsideAt ?? null });
+  }
+  return out.sort((a, b) => (b.setAsideAt ?? "").localeCompare(a.setAsideAt ?? ""));
+}
+function setAside(store, mode) {
+  const wallet = store.wallet(mode);
+  if (!wallet) throw new CliError("NO_WALLET", `There is no ${mode} wallet in use.`);
+  const dir = folder(mode, wallet.address);
+  if (store.exists(dir)) fs.renameSync(store.path(dir), store.path(`${dir}.${Date.now()}`));
+  fs.mkdirSync(store.path(dir, "sessions"), { recursive: true, mode: 448 });
+  for (const chain of chainsFor(mode)) move(store, `sessions/${chain.chainId}.json`, `${dir}/sessions/${chain.chainId}.json`);
+  move(store, `drafts/${mode}.json`, `${dir}/draft.json`);
+  store.writeJson(`${dir}/wallet.json`, { ...wallet, setAsideAt: (/* @__PURE__ */ new Date()).toISOString() });
+  store.remove(`wallet-${mode}.json`);
+  return { address: wallet.address };
+}
+function restore(store, mode, address2) {
+  const dir = folder(mode, address2);
+  const rec = store.readJson(`${dir}/wallet.json`);
+  if (!rec) return false;
+  if (store.wallet(mode)) throw new CliError("WALLET_EXISTS", `A ${mode} wallet is already in use.`);
+  for (const chain of chainsFor(mode)) move(store, `${dir}/sessions/${chain.chainId}.json`, `sessions/${chain.chainId}.json`);
+  move(store, `${dir}/draft.json`, `drafts/${mode}.json`);
+  const { setAsideAt: _dropped, ...wallet } = rec;
+  store.saveWallet(mode, wallet);
+  fs.rmSync(store.path(dir), { recursive: true, force: true });
+  return true;
+}
+function useWallet(store, mode, address2) {
+  if (typeof address2 !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(address2)) throw new CliError("BAD_INPUT", "Pick a wallet.");
+  if (!store.exists(`${folder(mode, address2)}/wallet.json`)) throw new CliError("NO_WALLET", "That wallet is not among the ones set aside here. Use Recover from passkey instead.");
+  if (store.wallet(mode)) setAside(store, mode);
+  restore(store, mode, address2);
+  return { address: store.wallet(mode).address };
+}
+
 // src/webauthn.ts
 var RP_ID = "localhost";
 var b64url = {
@@ -47471,6 +47526,7 @@ async function recoverWallet(ctx) {
     ctx.job.step("Reading the passkey");
     return client.recoverFromPasskey({ rpId: RP_ID, webAuthn: fns, chainId: chains[0].chainId });
   });
+  if (restore(ctx.store, ctx.mode, address2)) return { address: getAddress(address2) };
   const cred = signer.credential;
   if (cred.kind !== "webauthn") throw new CliError("UNEXPECTED", "The SDK returned a credential that is not a passkey.");
   ctx.store.saveWallet(ctx.mode, {
@@ -48797,6 +48853,34 @@ Always lets the agent repeat this swap direction on ${chain.name} without asking
   return { sentence, ruleKey, kind, violations, parts };
 }
 
+// src/adopt.ts
+async function adoptPending(store, mode, chain, wallet) {
+  const record2 = store.session(chain.chainId);
+  if (!record2 || record2.status !== "pending") return record2;
+  try {
+    const draft = store.draft(mode);
+    const input2 = draft && draft.id === record2.draftId ? draft.inputs?.[chain.key] : null;
+    const secret = store.readSecret(record2.keyFile);
+    if (!input2 || !secret) return record2;
+    const policy = compilePolicy(chain, input2, record2.expiry);
+    const sessionAddress = privateKeyToAddress(secret);
+    for (const stage of planStages(policy.permissions, chain.storageBudget)) {
+      if (stage.register) {
+        if (!await isValidKey(chain, wallet, record2.keyId)) return record2;
+      } else {
+        const have = await grantedPairs(chain, wallet, sessionAddress);
+        if (!have || !stage.calls.every((c) => have.has(pair(c.to, c.signature)))) return record2;
+      }
+    }
+    const session = { walletAddress: wallet, publicKey: record2.publicKey, permissions: policy.permissions, expiry: record2.expiry };
+    const active = { ...record2, status: "active", serialized: serializeSession(session), grantedAt: (/* @__PURE__ */ new Date()).toISOString() };
+    store.saveSession(chain.chainId, active);
+    return active;
+  } catch {
+    return record2;
+  }
+}
+
 // src/session.ts
 function sessionView(chain, record2, valid) {
   if (!record2 || record2.status === "pending") return null;
@@ -48826,8 +48910,8 @@ async function networkStatus(ctx, chain, opts) {
     addressUrl: wallet ? addressUrl(chain, wallet.address) : null,
     keystoreAccountUrl: wallet ? keystoreAccountUrl(chain, wallet.address) : null
   };
-  const record2 = ctx.store.session(chain.chainId);
   if (!wallet) return { ...base2, asOf: null, error: null, balances: null, session: null, positions: [] };
+  const record2 = await adoptPending(ctx.store, ctx.mode, chain, wallet.address);
   try {
     const [bal, valid, positions] = await Promise.all([
       balances2(chain, wallet.address),
@@ -48902,29 +48986,29 @@ async function execute2(ctx, input2) {
 }
 
 // src/store.ts
-import fs from "node:fs";
-import path from "node:path";
+import fs2 from "node:fs";
+import path2 from "node:path";
 import crypto7 from "node:crypto";
 var Store = class {
   dir;
   constructor(dir) {
     if (!dir) throw new Error("--data-dir is required");
-    this.dir = path.resolve(dir);
-    for (const d of ["", "keys", "sessions", "jobs", "drafts", "cache", "history"]) this.ensureDir(path.join(this.dir, d));
+    this.dir = path2.resolve(dir);
+    for (const d of ["", "keys", "sessions", "jobs", "drafts", "cache", "history"]) this.ensureDir(path2.join(this.dir, d));
   }
   ensureDir(d) {
-    fs.mkdirSync(d, { recursive: true, mode: 448 });
+    fs2.mkdirSync(d, { recursive: true, mode: 448 });
     try {
-      if ((fs.statSync(d).mode & 511) !== 448) fs.chmodSync(d, 448);
+      if ((fs2.statSync(d).mode & 511) !== 448) fs2.chmodSync(d, 448);
     } catch {
     }
   }
   path(...parts) {
-    return path.join(this.dir, ...parts);
+    return path2.join(this.dir, ...parts);
   }
   readJson(rel) {
     try {
-      return JSON.parse(fs.readFileSync(this.path(rel), "utf8"));
+      return JSON.parse(fs2.readFileSync(this.path(rel), "utf8"));
     } catch (e) {
       if (e?.code === "ENOENT") return null;
       throw e;
@@ -48934,26 +49018,26 @@ var Store = class {
   writeJson(rel, value) {
     const target = this.path(rel);
     const tmp = `${target}.${crypto7.randomBytes(6).toString("hex")}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 384, flag: "wx" });
-    fs.renameSync(tmp, target);
+    fs2.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 384, flag: "wx" });
+    fs2.renameSync(tmp, target);
   }
   remove(rel) {
     try {
-      fs.unlinkSync(this.path(rel));
+      fs2.unlinkSync(this.path(rel));
     } catch (e) {
       if (e?.code !== "ENOENT") throw e;
     }
   }
   /** Create a secret file. Fails if it already exists, so a key is never overwritten. */
   writeSecretOnce(rel, value) {
-    fs.writeFileSync(this.path(rel), value, { mode: 384, flag: "wx" });
+    fs2.writeFileSync(this.path(rel), value, { mode: 384, flag: "wx" });
   }
   /** Read a secret file, refusing one that other users could read. */
   readSecret(rel) {
     const p = this.path(rel);
     let st;
     try {
-      st = fs.statSync(p);
+      st = fs2.statSync(p);
     } catch (e) {
       if (e?.code === "ENOENT") return null;
       throw e;
@@ -48961,10 +49045,10 @@ var Store = class {
     if ((st.mode & 63) !== 0) {
       throw new Error(`${p} is readable by other users (mode ${(st.mode & 511).toString(8)}). Run chmod 600 on it and retry.`);
     }
-    return fs.readFileSync(p, "utf8").trim();
+    return fs2.readFileSync(p, "utf8").trim();
   }
   exists(rel) {
-    return fs.existsSync(this.path(rel));
+    return fs2.existsSync(this.path(rel));
   }
   // ---- typed accessors -------------------------------------------------
   mode() {
@@ -49027,8 +49111,8 @@ async function run(argv, env) {
 `);
     if (!logFile) return;
     try {
-      if (fs2.existsSync(logFile) && fs2.statSync(logFile).size > 512e3) fs2.renameSync(logFile, `${logFile}.1`);
-      fs2.appendFileSync(logFile, `${(/* @__PURE__ */ new Date()).toISOString()} ${line.slice(0, 4e3)}
+      if (fs3.existsSync(logFile) && fs3.statSync(logFile).size > 512e3) fs3.renameSync(logFile, `${logFile}.1`);
+      fs3.appendFileSync(logFile, `${(/* @__PURE__ */ new Date()).toISOString()} ${line.slice(0, 4e3)}
 `, { mode: 384 });
     } catch {
     }
@@ -49041,8 +49125,8 @@ async function run(argv, env) {
     if (!command) throw new CliError("BAD_ARGS", "Missing command.");
     const store = new Store(flags["data-dir"]);
     if (flags["data-dir"]) {
-      fs2.mkdirSync(path2.join(flags["data-dir"], "logs"), { recursive: true, mode: 448 });
-      logFile = path2.join(flags["data-dir"], "logs", "cli.log");
+      fs3.mkdirSync(path3.join(flags["data-dir"], "logs"), { recursive: true, mode: 448 });
+      logFile = path3.join(flags["data-dir"], "logs", "cli.log");
       log(`run ${command}${flags.network ? " " + flags.network : ""}`);
     }
     const input2 = await readInput(flags);
@@ -49071,6 +49155,15 @@ async function run(argv, env) {
           store.setMode(input2.mode);
         }
         data = { mode: store.mode() };
+        break;
+      case "wallets":
+        data = { wallets: listAside(store, mode) };
+        break;
+      case "set-aside":
+        data = setAside(store, mode);
+        break;
+      case "use-wallet":
+        data = useWallet(store, mode, input2?.address);
         break;
       case "preset":
         data = { id: "v3-lp", title: "V3 LP", durationDays: 7, networks: Object.fromEntries(chainsFor(mode).map((c) => [c.key, presetFor(c)])) };

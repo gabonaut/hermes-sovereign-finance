@@ -11,6 +11,7 @@ import { CliError, decodeFailure, relayDropped } from "./errors.ts";
 import type { JobReporter } from "./job.ts";
 import { compilePolicy, pair, type GrantInput } from "./policy.ts";
 import type { SessionRecord, Store, WalletRecord } from "./store.ts";
+import { restore } from "./wallets.ts";
 import { RP_ID, webAuthnFns, type WebAuthnTransport } from "./webauthn.ts";
 
 export type AdminCtx = {
@@ -89,6 +90,8 @@ export async function recoverWallet(ctx: AdminCtx) {
     ctx.job.step("Reading the passkey");
     return client.recoverFromPasskey({ rpId: RP_ID, webAuthn: fns, chainId: chains[0].chainId });
   });
+  // A wallet that was set aside here comes back with its session records.
+  if (restore(ctx.store, ctx.mode, address)) return { address: getAddress(address) };
   const cred = signer.credential;
   if (cred.kind !== "webauthn") throw new CliError("UNEXPECTED", "The SDK returned a credential that is not a passkey.");
   ctx.store.saveWallet(ctx.mode, {

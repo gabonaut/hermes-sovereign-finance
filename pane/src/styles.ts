@@ -144,6 +144,13 @@ button.sf-step-head:hover .sf-step-caret{color:var(--sf-fg)}
 
 /* Step 1 */
 .sf-wallet{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.sf-switch-open{margin-top:10px}
+.sf-switch-open:disabled{opacity:.5;cursor:default}
+.sf-switch{display:flex;flex-direction:column;gap:10px;margin-top:12px;padding:12px;border:1px solid var(--sf-line);border-radius:6px;background:var(--sf-wash)}
+.sf-switch-title,.sf-earlier-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--sf-fg2)}
+.sf-earlier{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.sf-earlier-list{display:flex;flex-direction:column;gap:6px;margin:0;padding:0}
+.sf-earlier-list > li{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0;padding:0;list-style:none}
 .sf-wallet-main{display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0}
 .sf-address{display:block;max-width:25ch;font-family:var(--sf-mono);font-size:12px;font-variant-ligatures:none;line-height:1.6;-webkit-user-select:text;user-select:text}
 .sf-address span{display:inline-block;margin-right:.45ch}
