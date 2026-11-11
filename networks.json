@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "modes": {
+    "testnet": { "bnb": 97, "ethereum": 11155111 },
+    "mainnet": { "bnb": 56, "ethereum": 1 }
+  },
+  "chains": {
+    "97": {
+      "key": "bnb",
+      "name": "BNB Chain testnet",
+      "shortName": "BNB testnet",
+      "nativeSymbol": "tBNB",
+      "sdkConfig": "BNB_TESTNET",
+      "rpcUrl": "https://bsc-testnet-rpc.publicnode.com",
+      "relayUrl": "https://testnet-relay.altana.network",
+      "explorerUrl": "https://testnet.bscscan.com",
+      "keystoreExplorerUrl": "https://testnet.altana.network",
+      "dexscreenerChain": null,
+      "keyStore": { "address": "0x6b8361C29d05D498b1a12B54A37310f94171E94A" },
+      "keyStoreController": { "address": "0xb530D1971f5453F3359518343F05D0AedFfF7e12" },
+      "dex": {
+        "name": "PancakeSwap V3",
+        "kind": "pancake",
+        "feeTiers": [100, 500, 2500, 10000],
+        "factory": { "address": "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865" },
+        "poolDeployer": { "address": "0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9" },
+        "poolInitCodeHash": "0x6ce8eb472fa82df5469c6ab6d485f17c3ad13c8cd7af59b3d4a8026c5ce0f7e2",
+        "router": { "address": "0x1b81D678ffb9C0263b24A97847620C99d213eB14" },
+        "quoter": { "address": "0xbC203d7f83677c7ed3F7acEc959963E7F4ECC5C2" },
+        "positionManager": { "address": "0x427bF5b37357632377eCbEC9de3626C71A5396c1" }
+      },
+      "wrappedNative": "WBNB",
+      "assets": [
+        { "symbol": "WBNB", "address": "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd", "decimals": 18 },
+        { "symbol": "USDT", "address": "0x337610d27c682E347C9cD60BD4b3b107C9d34dDd", "decimals": 18 },
+        { "symbol": "BUSD", "address": "0xeD24FC36d5Ee211Ea25A80239Fb8C4Cfd80f12Ee", "decimals": 18 }
+      ],
+      "preset": {
+        "nativeCap": "0.2",
+        "feeHeadroom": "0.02",
+        "caps": { "WBNB": "0.5", "USDT": "500", "BUSD": "500" }
+      }
+    },
+    "11155111": {
+      "key": "ethereum",
+      "name": "Sepolia",
+      "shortName": "Sepolia",
+      "nativeSymbol": "SepoliaETH",
+      "sdkConfig": null,
+      "relayNote": "Sepolia limits how much new storage one transaction can write to the wallet, which is why activation takes several approvals there.",
+      "storageBudget": 18,
+      "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+      "relayUrl": "https://testnet-relay.altana.network",
+      "explorerUrl": "https://sepolia.etherscan.io",
+      "keystoreExplorerUrl": "https://testnet.altana.network",
+      "dexscreenerChain": null,
+      "keyStore": { "address": "0x38Aaf396F462Ad3a4F38ADa653AF6bDEA55F772d" },
+      "keyStoreController": { "address": "0xc1525B766c134f7EB5B1d8e4a69C6Cb97Aff2379" },
+      "dex": {
+        "name": "Uniswap V3",
+        "kind": "uniswap",
+        "feeTiers": [100, 500, 3000, 10000],
+        "factory": { "address": "0x0227628f3F023bb0B980b67D528571c95c6DaC1c" },
+        "poolDeployer": { "address": "0x0227628f3F023bb0B980b67D528571c95c6DaC1c" },
+        "poolInitCodeHash": "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54",
+        "router": { "address": "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E" },
+        "quoter": { "address": "0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3" },
+        "positionManager": { "address": "0x1238536071E1c677A632429e3655c799b22cDA52" }
+      },
+      "wrappedNative": "WETH",
+      "assets": [
+        { "symbol": "WETH", "address": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14", "decimals": 18 },
+        { "symbol": "USDC", "address": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", "decimals": 6 }
+      ],
+      "preset": {
+        "nativeCap": "0.05",
+        "feeHeadroom": "0.02",
+        "caps": { "WETH": "0.1", "USDC": "200" }
+      }
+    },
+    "56": {
+      "key": "bnb",
+      "name": "BNB Chain",
+      "shortName": "BNB Chain",
+      "nativeSymbol": "BNB",
+      "sdkConfig": "BNB",
+      "rpcUrl": "https://bsc-rpc.publicnode.com",
+      "relayUrl": "https://relay.altana.network",
+      "explorerUrl": "https://bscscan.com",
+      "keystoreExplorerUrl": "https://explorer.altana.network",
+      "dexscreenerChain": "bsc",
+      "keyStore": { "address": "0x6572427ED530BadcF7375Cf9A4709D8d2b0E7E0a" },
+      "keyStoreController": { "address": "0x0834Ee2C9BdC3E3efF0a2dC34393D4B0e546A555" },
+      "dex": {
+        "name": "PancakeSwap V3",
+        "kind": "pancake",
+        "feeTiers": [100, 500, 2500, 10000],
+        "factory": { "address": "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865" },
+        "poolDeployer": { "address": "0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9" },
+        "poolInitCodeHash": "0x6ce8eb472fa82df5469c6ab6d485f17c3ad13c8cd7af59b3d4a8026c5ce0f7e2",
+        "router": { "address": "0x1b81D678ffb9C0263b24A97847620C99d213eB14" },
+        "quoter": { "address": "0xB048Bbc1Ee6b733FFfCFb9e9CeF7375518e25997" },
+        "positionManager": { "address": "0x46A15B0b27311cedF172AB29E4f4766fbE7F4364" }
+      },
+      "wrappedNative": "WBNB",
+      "assets": [
+        { "symbol": "WBNB", "address": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "decimals": 18 },
+        { "symbol": "USDT", "address": "0x55d398326f99059fF775485246999027B3197955", "decimals": 18 },
+        { "symbol": "USDC", "address": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", "decimals": 18 },
+        { "symbol": "BTCB", "address": "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", "decimals": 18 },
+        { "symbol": "ETH", "address": "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", "decimals": 18 }
+      ],
+      "preset": {
+        "nativeCap": "0.03",
+        "feeHeadroom": "0.005",
+        "caps": { "WBNB": "0.05", "USDT": "30", "USDC": "30", "BTCB": "0.0003", "ETH": "0.01" }
+      }
+    },
+    "1": {
+      "key": "ethereum",
+      "name": "Ethereum",
+      "shortName": "Ethereum",
+      "nativeSymbol": "ETH",
+      "sdkConfig": "ETHEREUM",
+      "rpcUrl": "https://ethereum-rpc.publicnode.com",
+      "relayUrl": "https://relay.altana.network",
+      "explorerUrl": "https://etherscan.io",
+      "keystoreExplorerUrl": "https://explorer.altana.network",
+      "dexscreenerChain": "ethereum",
+      "keyStore": { "address": "0xb70fDa90C1d576Ba8399946a0c10ECD9d9Ea923b" },
+      "keyStoreController": { "address": "0x30a188Eecf14F4142B0d828ce838C9E1134e7FaA" },
+      "dex": {
+        "name": "Uniswap V3",
+        "kind": "uniswap",
+        "feeTiers": [100, 500, 3000, 10000],
+        "factory": { "address": "0x1F98431c8aD98523631AE4a59f267346ea31F984" },
+        "poolDeployer": { "address": "0x1F98431c8aD98523631AE4a59f267346ea31F984" },
+        "poolInitCodeHash": "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54",
+        "router": { "address": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45" },
+        "quoter": { "address": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e" },
+        "positionManager": { "address": "0xC36442b4a4522E871399CD717aBDD847Ab11FE88" }
+      },
+      "wrappedNative": "WETH",
+      "assets": [
+        { "symbol": "WETH", "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "decimals": 18 },
+        { "symbol": "USDC", "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "decimals": 6 },
+        { "symbol": "USDT", "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "decimals": 6 },
+        { "symbol": "WBTC", "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", "decimals": 8 }
+      ],
+      "preset": {
+        "nativeCap": "0.012",
+        "feeHeadroom": "0.006",
+        "caps": { "WETH": "0.015", "USDC": "40", "USDT": "40", "WBTC": "0.0004" }
+      }
+    }
+  },
+  "skills": {
+    "indexUrl": "https://skills.altana.network/index.json",
+    "pinned": {
+      "dexscreener-token-radar": "dc541956a847e00c2793da679b8a4121a5b9f46f08f07d852b88f86681c39a0b",
+      "pancakeswap-trading": "8721c5294ac8e3475ab7b14c41f397061e9c4de550f86c5ec17a51da8db1f4d5",
+      "pancakeswap-liquidity": "80d8bb4435689a2a696b22ebbf295c7f805c43f6287d1cd0c6e97951c3548b0f"
+    }
+  }
+}
