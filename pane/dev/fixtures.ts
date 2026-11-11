@@ -191,13 +191,16 @@ export function draftFor(mode: Mode, now: number, lowOnEthereum = false): Draft 
         scopeText: scopeFor(mode, 'bnb'),
         cost: { keystoreFee: '0.0012', relayFeeEstimate: '0.0004', total: '0.0016', nativeSymbol: bnb, firstAction: true },
         balance: FUNDED.bnb.native,
-        sufficient: true
+        sufficient: true,
+        approvals: 1
       },
       ethereum: {
         scopeText: scopeFor(mode, 'ethereum'),
         cost: { keystoreFee: '0.0018', relayFeeEstimate: '0.0006', total: '0.0024', nativeSymbol: eth, firstAction: true },
         balance: lowOnEthereum ? '0.0010' : FUNDED.ethereum.native,
-        sufficient: !lowOnEthereum
+        sufficient: !lowOnEthereum,
+        // Sepolia activates in three stages; the other networks in one.
+        approvals: mode === 'testnet' ? 3 : 1
       }
     }
   }
