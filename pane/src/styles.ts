@@ -215,6 +215,19 @@ button.sf-step-head:hover .sf-step-caret{color:var(--sf-fg)}
 .sf-live{display:flex;flex-direction:column;gap:10px;padding-top:14px;border-top:1px solid var(--sf-line)}
 .sf-section-title{font-size:13px;font-weight:600}
 .sf-cards{display:flex;flex-direction:column;gap:12px}
+.sf-plays{display:flex;flex-direction:column;gap:6px;margin-top:4px;padding-top:10px;border-top:1px solid var(--sf-line)}
+.sf-plays-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
+.sf-play-list{display:flex;flex-direction:column;gap:0;margin:0;padding:0;list-style:none}
+.sf-play{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-top:1px solid color-mix(in srgb,var(--sf-line) 60%,transparent)}
+.sf-play:first-child{border-top:0}
+.sf-play-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sf-play-title{font-size:12.5px;font-weight:600}
+.sf-play-blurb{color:var(--sf-fg2);font-size:12px;line-height:1.4}
+.sf-play-fields{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px}
+.sf-play-field{width:150px}
+.sf-play-field:nth-of-type(2){width:104px}
+.sf-play-note{color:var(--sf-accent);font-size:11.5px;margin-top:2px}
+.sf-play-actions{flex:none;display:flex;flex-direction:column;gap:4px;align-items:stretch}
 .sf-card{display:flex;flex-direction:column;gap:8px;min-width:0;padding:12px;border:1px solid var(--sf-line);border-radius:4px}
 .sf-card-head{display:flex;align-items:center;gap:10px;min-height:22px}
 .sf-card-net{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600}

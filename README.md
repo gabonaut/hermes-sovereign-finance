@@ -80,6 +80,8 @@ Ask in chat, for example:
 
 The agent lists the pools with volume, TVL and fee APR. You choose, and Hermes asks you to approve the batch.
 
+Each active network in the pane also has an "Ask the agent" block: Find a pool, Open a position, Keep it in range, Compound fees and Cash out. A button writes the request into the chat box and you send it. The plays are a short list in `pane/src/plays.ts`; add an entry there to offer your own.
+
 ### Rebalance on cron
 
 ```

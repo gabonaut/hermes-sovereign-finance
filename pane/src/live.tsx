@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { formatDate, formatDateTime, parseTime, rangePosition, relativeTime, timeAgo } from './format'
 import type { Amount, NetworkState, Position, Session } from './types'
 import { ExtLink, Hex, Num, usePane, Warning } from './ui'
+import { Plays } from './plays-view'
 
 const STATUS: Record<string, { label: string; tone: StatusTone }> = {
   active: { label: 'Active', tone: 'good' },
@@ -174,8 +175,9 @@ function SessionCard({ network, session }: { network: NetworkState; session: Ses
           ))}
         </ul>
       ) : session.status === 'active' ? (
-        <p className="sf-empty">No position yet. Ask the agent in chat to open one.</p>
+        <p className="sf-empty">No position yet.</p>
       ) : null}
+      {session.status === 'active' ? <Plays network={network} /> : null}
 
       <ConfirmDialog
         confirmLabel="Revoke"
