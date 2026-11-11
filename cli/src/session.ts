@@ -3,6 +3,7 @@ import { type Address, type Hex } from "viem";
 import { deserializeSession, signerFromPrivateKey } from "@altananetwork/sdk";
 import { positionManagerAbi } from "./abi.ts";
 import { compile, describe, type Action } from "./actions.ts";
+import { adoptPending } from "./adopt.ts";
 import { addressUrl, altanaClient, chainFor, chainsFor, keystoreAccountUrl, keystoreKeyUrl, rpc, txUrl, type Chain, type Mode, type NetworkKey } from "./config.ts";
 import { balances, isValidKey } from "./chainread.ts";
 import { CliError, decodeFailure, relayDropped } from "./errors.ts";
@@ -40,8 +41,9 @@ export async function networkStatus(ctx: Ctx, chain: Chain, opts: { positions: b
     addressUrl: wallet ? addressUrl(chain, wallet.address) : null,
     keystoreAccountUrl: wallet ? keystoreAccountUrl(chain, wallet.address) : null,
   };
-  const record = ctx.store.session(chain.chainId);
   if (!wallet) return { ...base, asOf: null, error: null, balances: null, session: null, positions: [] };
+  // A grant that confirmed after the plugin stopped waiting shows up here as an active session.
+  const record = await adoptPending(ctx.store, ctx.mode, chain, wallet.address);
   try {
     const [bal, valid, positions] = await Promise.all([
       balances(chain, wallet.address),
