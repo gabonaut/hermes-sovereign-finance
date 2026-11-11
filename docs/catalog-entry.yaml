@@ -12,7 +12,9 @@ requires_hermes: ">=0.23.0"
 version: "0.1.0"
 docs_url: https://github.com/gabonaut/hermes-sovereign-finance#readme
 platforms: [macos, linux]
-known_issues: "The session scope limits contracts, functions and daily amounts; recipients are set by the plugin before signing, so keep the session key file private. YOLO mode, approvals.mode off and approvals.cron_mode approve skip the approval prompt."
+known_issues:
+  - "The session scope limits contracts, functions and daily amounts. Recipients are set by the plugin before signing, so keep the session key file private."
+  - "YOLO mode, approvals.mode off and approvals.cron_mode approve skip the approval prompt. The onchain limits still apply."
 capabilities:
   provides_tools:
     - sovereign_status
