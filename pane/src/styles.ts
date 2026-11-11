@@ -111,6 +111,7 @@ export const PANE_CSS = `
 /* Scrolling body */
 .sf-scroll{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:14px 8px 28px 16px}
 .sf-content{display:flex;flex-direction:column;gap:14px;transition:opacity .12s ease}
+.sf-root[data-page] .sf-content,.sf-root[data-page] .sf-header,.sf-root[data-page] .sf-job{width:min(100%,46rem);margin-left:auto;margin-right:auto}
 .sf-content[data-pending]{opacity:.45;pointer-events:none}
 .sf-loading{display:flex;flex-direction:column;gap:18px;padding-top:4px}
 .sf-loading-row{display:flex;align-items:center;gap:12px}

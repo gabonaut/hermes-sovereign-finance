@@ -6,6 +6,7 @@ import { createStore, PANE_ID, PLUGIN_ID } from './store'
 const PANE_WIDTH = '26rem'
 const PANE_MIN_WIDTH = '20rem'
 const PANE_MAX_WIDTH = '36rem'
+const PAGE_PATH = '/sovereign-finance'
 
 const plugin: HermesPlugin = {
   id: PLUGIN_ID,
@@ -29,6 +30,21 @@ const plugin: HermesPlugin = {
         maxWidth: PANE_MAX_WIDTH
       },
       render: () => <Pane ctx={ctx} store={store} />
+    })
+
+    // The same wallet as a full page, with a row for it in the sidebar beside the app's own pages.
+    ctx.register({
+      id: 'page',
+      area: 'routes',
+      title: 'Sovereign Finance',
+      data: { path: PAGE_PATH },
+      render: () => <Pane ctx={ctx} page store={store} />
+    })
+    ctx.register({
+      id: 'nav',
+      area: 'sidebar.nav',
+      title: 'Sovereign Finance',
+      data: { codicon: 'credit-card', label: 'Sovereign Finance', path: PAGE_PATH }
     })
   }
 }
