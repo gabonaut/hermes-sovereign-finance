@@ -47417,8 +47417,8 @@ async function costOf(chain, wallet, permissions) {
       nativeSymbol: chain.nativeSymbol,
       firstAction
     },
-    /** Passkey approvals this activation takes on this network. */
-    approvals: stages,
+    /** Passkey approvals this activation takes on this network. A new wallet under a storage budget is set up in a step of its own. */
+    approvals: stages + (chain.storageBudget && firstAction ? 1 : 0),
     balance: formatUnits(balance, 18),
     sufficient: balance >= total,
     keystoreFeeRaw: keystoreFee,
@@ -47448,10 +47448,12 @@ async function grantDraft(ctx, input2) {
 function adminSigner(wallet, fns) {
   return signerFromPasskey(wallet.credential, { webAuthn: fns });
 }
+var SETUP_TARGET = "0x000000000000000000000000000000000000dEaD";
 function approvalsText(mode, draft, keys) {
   const counts = keys.map((k) => {
     const chain = chainFor(mode, k);
-    return { name: chain.name, n: planStages(compilePolicy(chain, draft.inputs[k], draft.expiry).permissions, chain.storageBudget).length };
+    const n = Number(draft.networks?.[k]?.approvals) || planStages(compilePolicy(chain, draft.inputs[k], draft.expiry).permissions, chain.storageBudget).length;
+    return { name: chain.name, n };
   });
   if (counts.every((c) => c.n === 1)) return "You will approve with your passkey once per network.";
   const total = counts.reduce((sum, c) => sum + c.n, 0);
@@ -47530,6 +47532,19 @@ async function activate(ctx, input2) {
         const sessionSigner = signerFromPrivateKey(secret);
         const stages = planStages(policy.permissions, chain.storageBudget);
         const before = await nativeBalance(chain, wallet.address);
+        if (chain.storageBudget && (await keystoreKeys(chain, wallet.address)).length === 0) {
+          ctx.job.step(`Setting up the wallet on ${chain.name}`);
+          say(`Set up your wallet on ${chain.name}. This one-time step registers your passkey's key in the Keystore. It moves no funds.`);
+          let setup;
+          try {
+            setup = await client.execute({ wallet: { address: wallet.address }, signer, calls: [{ to: SETUP_TARGET, value: 0n, data: "0x" }], chainId: chain.chainId });
+          } catch (e) {
+            const f = decodeFailure(e);
+            ctx.log(`setup ${chain.name} failed: ${f.raw}`);
+            throw new CliError("SETUP_FAILED", `The wallet could not be set up on ${chain.name}. ${f.code === "RELAY_REJECTED" ? relayDropped(chain.relayNote) : f.message} Activate again to retry.`);
+          }
+          if (setup.status === "FAILED") throw new CliError("SETUP_FAILED", `The wallet could not be set up on ${chain.name}. ${relayDropped(chain.relayNote)} Activate again to retry.`);
+        }
         const hashes = [...record2.grantTxs ?? []];
         for (let i = record2.stagesDone ?? 0; i < stages.length; i++) {
           const stage = stages[i];
