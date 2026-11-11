@@ -11,6 +11,7 @@ import { forgetPlan, planClose, planOpen, resolveActions } from "./plans.ts";
 import { listPools, quoteSwap } from "./quote.ts";
 import { describeBatch, execute, status } from "./session.ts";
 import { Store } from "./store.ts";
+import { listAside, setAside, useWallet } from "./wallets.ts";
 import type { WebAuthnTransport } from "./webauthn.ts";
 
 export type Env = {
@@ -95,6 +96,15 @@ export async function run(argv: string[], env: Env): Promise<number> {
           store.setMode(input.mode);
         }
         data = { mode: store.mode() };
+        break;
+      case "wallets":
+        data = { wallets: listAside(store, mode) };
+        break;
+      case "set-aside":
+        data = setAside(store, mode);
+        break;
+      case "use-wallet":
+        data = useWallet(store, mode, input?.address);
         break;
       case "preset":
         data = { id: "v3-lp", title: "V3 LP", durationDays: 7, networks: Object.fromEntries(chainsFor(mode).map((c) => [c.key, presetFor(c)])) };

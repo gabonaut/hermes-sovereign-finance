@@ -171,11 +171,20 @@ class BackendAuthTests(unittest.TestCase):
         self.assertEqual(self.get({"x-hermes-session-token": "anything"}).status_code, 403)
         self.assertEqual(self.get({"x-test-auth": "hosted"}).status_code, 403)  # hosted, but no redeemed ticket
         self.assertEqual(self.get({"x-hermes-gateway-ticket": "unredeemed"}).status_code, 403)
-        for path in ("create", "activate", "revoke", "withdraw", "grant", "mode"):
+        for path in ("create", "activate", "revoke", "withdraw", "grant", "mode", "wallet/set-aside", "wallet/use"):
             self.assertEqual(self.client.post(f"/api/plugins/sovereign-finance/{path}", json={}).status_code, 403)
 
     def test_host_isolation_needs_the_redeemed_ticket_header(self):
         self.assertEqual(self.get({"x-test-auth": "hosted", "x-hermes-gateway-ticket": "redeemed"}).status_code, 200)
+
+    def test_wallets_set_aside_are_listed_with_public_data_only(self):
+        folder = Path(self.tmp.name) / "wallets" / "testnet" / "0xabc"
+        folder.mkdir(parents=True)
+        (folder / "wallet.json").write_text('{"address": "0xAbC", "setAsideAt": "2026-01-01T00:00:00Z", "credential": {"id": "x"}}')
+        data = self.get({"x-test-auth": "desktop"}).json()["data"]
+        self.assertEqual(data["otherWallets"], [{"address": "0xAbC", "setAsideAt": "2026-01-01T00:00:00Z"}])
+        r = self.client.post("/api/plugins/sovereign-finance/wallet/use", json={"address": "0xAbC"}, headers={"x-test-auth": "desktop"})
+        self.assertTrue(r.json()["ok"])
 
     def test_no_top_level_profile_key_is_ever_required(self):
         r = self.client.post("/api/plugins/sovereign-finance/mode", json={"mode": "sideways"}, headers={"x-test-auth": "desktop"})

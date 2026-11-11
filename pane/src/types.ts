@@ -145,6 +145,13 @@ export interface WalletState {
   job: Job | null
   preset: Preset
   draft: Draft | null
+  /** Wallets set aside in this mode, newest first. */
+  otherWallets: OtherWallet[]
+}
+
+export interface OtherWallet {
+  address: string
+  setAsideAt: string | null
 }
 
 export interface GrantRequest {

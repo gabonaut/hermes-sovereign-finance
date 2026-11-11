@@ -92,7 +92,7 @@ function Steps({ state, draft, onDraft, onWithdraw }: StepsProps) {
   return (
     <ol className="sf-steps">
       <Step n={1} onToggle={toggle(0)} open={isOpen(0)} status={statusOf(0)} summary={walletSummary(address)} title="Create Smart Agentic Wallet">
-        <WalletStep address={address} />
+        <WalletStep address={address} networks={networks} onSwitched={() => onDraft(null)} others={state.otherWallets} />
       </Step>
       <Step
         blocked={blocked[1]}

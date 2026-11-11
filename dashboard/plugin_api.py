@@ -160,6 +160,34 @@ def _draft(mode: str) -> dict | None:
     return draft
 
 
+def _other_wallets(mode: str) -> list[dict]:
+    """Wallets set aside in this mode. Their records hold public data only."""
+    folder = paths.data_dir() / "wallets" / mode
+    found = []
+    for path in folder.glob("*/wallet.json") if folder.is_dir() else []:
+        record = _read_json(path)
+        if isinstance(record, dict) and isinstance(record.get("address"), str):
+            found.append({"address": record["address"], "setAsideAt": record.get("setAsideAt")})
+    return sorted(found, key=lambda w: w.get("setAsideAt") or "", reverse=True)
+
+
+def _switch_wallet(command: str, payload: dict) -> dict:
+    """Set the wallet in use aside, or bring one back. Moves local records; signs and sends nothing."""
+    with _lock:
+        if _job_running():
+            return fail("JOB_RUNNING", "Finish or cancel the request in progress before changing wallets.")
+        result = cli.run(command, payload, timeout=20)
+        if not result.get("ok"):
+            return result
+        for old in _job_files():
+            try:
+                old.unlink()
+            except OSError:
+                pass
+        _status_cache.pop(_mode(), None)
+    return ok(result.get("data") or {})
+
+
 def _start_job(command: str, payload: dict, network: str | None = None) -> dict:
     with _lock:
         if _job_running():
@@ -215,6 +243,7 @@ def get_state():
         "job": _current_job(),
         "preset": _preset(mode),
         "draft": _draft(mode),
+        "otherWallets": _other_wallets(mode),
     })
 
 
@@ -239,6 +268,16 @@ def create(body: dict = Body(default={})):
 @router.post("/recover")
 def recover(body: dict = Body(default={})):
     return _start_job("recover", {})
+
+
+@router.post("/wallet/set-aside")
+def wallet_set_aside(body: dict = Body(default={})):
+    return _switch_wallet("set-aside", {})
+
+
+@router.post("/wallet/use")
+def wallet_use(body: dict = Body(default={})):
+    return _switch_wallet("use-wallet", {"address": body.get("address")})
 
 
 @router.post("/grant")
