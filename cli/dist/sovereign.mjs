@@ -48797,6 +48797,34 @@ Always lets the agent repeat this swap direction on ${chain.name} without asking
   return { sentence, ruleKey, kind, violations, parts };
 }
 
+// src/adopt.ts
+async function adoptPending(store, mode, chain, wallet) {
+  const record2 = store.session(chain.chainId);
+  if (!record2 || record2.status !== "pending") return record2;
+  try {
+    const draft = store.draft(mode);
+    const input2 = draft && draft.id === record2.draftId ? draft.inputs?.[chain.key] : null;
+    const secret = store.readSecret(record2.keyFile);
+    if (!input2 || !secret) return record2;
+    const policy = compilePolicy(chain, input2, record2.expiry);
+    const sessionAddress = privateKeyToAddress(secret);
+    for (const stage of planStages(policy.permissions, chain.storageBudget)) {
+      if (stage.register) {
+        if (!await isValidKey(chain, wallet, record2.keyId)) return record2;
+      } else {
+        const have = await grantedPairs(chain, wallet, sessionAddress);
+        if (!have || !stage.calls.every((c) => have.has(pair(c.to, c.signature)))) return record2;
+      }
+    }
+    const session = { walletAddress: wallet, publicKey: record2.publicKey, permissions: policy.permissions, expiry: record2.expiry };
+    const active = { ...record2, status: "active", serialized: serializeSession(session), grantedAt: (/* @__PURE__ */ new Date()).toISOString() };
+    store.saveSession(chain.chainId, active);
+    return active;
+  } catch {
+    return record2;
+  }
+}
+
 // src/session.ts
 function sessionView(chain, record2, valid) {
   if (!record2 || record2.status === "pending") return null;
@@ -48826,8 +48854,8 @@ async function networkStatus(ctx, chain, opts) {
     addressUrl: wallet ? addressUrl(chain, wallet.address) : null,
     keystoreAccountUrl: wallet ? keystoreAccountUrl(chain, wallet.address) : null
   };
-  const record2 = ctx.store.session(chain.chainId);
   if (!wallet) return { ...base2, asOf: null, error: null, balances: null, session: null, positions: [] };
+  const record2 = await adoptPending(ctx.store, ctx.mode, chain, wallet.address);
   try {
     const [bal, valid, positions] = await Promise.all([
       balances2(chain, wallet.address),
