@@ -113,6 +113,25 @@ function ceil6(raw: bigint): string {
 /** Extra gas one new storage slot costs on a network with a storage budget. */
 const BUDGET_SLOT_GAS = 85_000n;
 
+/** A native amount for display, rounded down to six decimals. */
+function floor6(raw: bigint): string {
+  const unit = 10n ** 12n;
+  return formatUnits((raw / unit) * unit, 18);
+}
+
+/**
+ * What a transfer out of the wallet needs to leave behind in the native coin: the relay fee, with
+ * room for the relay pricing gas above the network's own quote, and the Keystore fee when this is
+ * the wallet's first transaction on the network.
+ */
+async function withdrawReserve(chain: Chain, wallet: Address): Promise<bigint> {
+  const [fee, keys, gasPrice, buffer] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), rpc(chain).getGasPrice(), relayGasBuffer(chain)]);
+  const first = keys.length === 0;
+  const gas = 600_000n + (first ? 550_000n : 0n) + buffer + (chain.storageBudget ? (first ? 16n : 2n) * BUDGET_SLOT_GAS : 0n);
+  const price = gasPrice * 2n > 100_000_000n ? gasPrice * 2n : 100_000_000n;
+  return gas * price + (first ? fee : 0n);
+}
+
 async function costOf(chain: Chain, wallet: Address, permissions: SessionPermissions) {
   const client = rpc(chain);
   const [fee, keys, gasPrice, balance, buffer] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet), relayGasBuffer(chain)]);
@@ -348,11 +367,13 @@ export async function withdraw(ctx: AdminCtx, input: { network: NetworkKey; asse
   const decimals = isNative ? 18 : asset!.decimals;
   const held = await balances(chain, wallet.address);
   const have = isNative ? held.nativeRaw : held.tokens.find((t) => t.symbol === symbol)!.raw;
+  // The wallet pays the relay fee in the native coin, and a wallet's first transaction on a
+  // network also pays one Keystore fee. That much has to stay behind.
+  const reserve = await withdrawReserve(chain, wallet.address);
+  const most = isNative ? (held.nativeRaw > reserve ? held.nativeRaw - reserve : 0n) : have;
   let amount: bigint;
   if (String(input.amount).trim().toLowerCase() === "max") {
-    // Leave room for the relay fee, which the wallet pays in the native coin.
-    const reserve = isNative ? (await rpc(chain).getGasPrice()) * 900_000n : 0n;
-    amount = have > reserve ? have - reserve : 0n;
+    amount = most;
   } else {
     try {
       amount = parseUnits(String(input.amount).trim(), decimals);
@@ -360,8 +381,14 @@ export async function withdraw(ctx: AdminCtx, input: { network: NetworkKey; asse
       throw new CliError("BAD_AMOUNT", `"${input.amount}" is not a number.`);
     }
   }
-  if (amount <= 0n) throw new CliError("BAD_AMOUNT", "Nothing to send.");
+  if (amount <= 0n) throw new CliError("BAD_AMOUNT", most === 0n && isNative ? `The wallet holds ${formatUnits(have, decimals)} ${symbol} on ${chain.name}, which is not more than the fee of about ${ceil6(reserve)}.` : "Nothing to send.");
   if (amount > have) throw new CliError("INSUFFICIENT_FUNDS", `The wallet holds ${formatUnits(have, decimals)} ${symbol} on ${chain.name}.`);
+  if (isNative && amount > most) {
+    throw new CliError("INSUFFICIENT_FUNDS", `About ${ceil6(reserve)} ${symbol} has to stay in the wallet for the fee. The most you can send is ${floor6(most)} ${symbol}. Use Max to send that.`);
+  }
+  if (!isNative && held.nativeRaw < reserve) {
+    throw new CliError("INSUFFICIENT_FUNDS", `The wallet holds ${formatUnits(held.nativeRaw, 18)} ${chain.nativeSymbol} on ${chain.name}. Sending needs about ${ceil6(reserve)} for the fee.`);
+  }
   const calls = isNative ? [{ to, value: amount }] : [{ to: asset!.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [to, amount] }) }];
   const client = altanaClient(chainsFor(ctx.mode));
   const res = await withPasskey(ctx, async (fns, say) => {

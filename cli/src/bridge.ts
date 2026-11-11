@@ -29,11 +29,12 @@ function page(nonce: string): string {
   button:disabled { opacity: .45; cursor: default; }
   #status { margin: 1.25rem 0 0; min-height: 1.5rem; opacity: .8; }
   #origin { margin-top: 2rem; font-size: .85rem; opacity: .6; }
+h1 svg{vertical-align:-4px;margin-right:8px}
 </style>
 </head>
 <body>
 <main>
-  <h1>Sovereign Finance for Hermes</h1>
+  <h1><svg aria-hidden="true" width="20" height="20" viewBox="-4.737 -26.701 449.183 449.183" fill="none"><path d="M298.4 361.864L156.979 220.442L298.4 79.0211L383.253 163.874C414.495 195.116 414.495 245.769 383.253 277.011L298.4 361.864Z" fill="#E2622E"/><path d="M141.421 361.45L56.5686 276.597C25.3266 245.355 25.3266 194.702 56.5686 163.46L141.421 78.6075L282.843 220.029L141.421 361.45Z" fill="#F2CB45"/><path d="M163.617 56.7248C194.858 25.4828 245.512 25.4828 276.754 56.7248L361.96 141.931L220.066 283.825L78.2908 142.051L163.617 56.7248Z" fill="#3665E4"/></svg>Sovereign Finance for Hermes</h1>
   <p id="prompt">Waiting for a request from Hermes.</p>
   <div id="buttons" hidden>
     <button id="approve" type="button">Approve with passkey</button>

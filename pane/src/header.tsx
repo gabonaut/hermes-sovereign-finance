@@ -2,6 +2,7 @@ import { Badge, ConfirmDialog, SegmentedControl, Skeleton } from '@hermes/plugin
 import { useState } from 'react'
 
 import { errorText } from './api'
+import { AltanaMark } from './icons'
 import type { Mode } from './types'
 import { InlineError } from './ui'
 
@@ -30,6 +31,7 @@ export function Header({ mode, loading, pending, disabled, onSwitch }: HeaderPro
   return (
     <>
     <header className="sf-header">
+      <AltanaMark size={18} />
       <h2 className="sf-title">Sovereign Finance</h2>
       {shown === 'mainnet' ? <Badge variant="warn">Real funds</Badge> : null}
       {shown === null ? (
