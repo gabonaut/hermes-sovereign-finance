@@ -73,7 +73,6 @@ export function createStore(ctx: PluginContext): Store {
   let lastStart = 0
   let pollMs = 0
   let stopPoll: (() => void) | null = null
-  let paneVisible = true
 
   const set = (patch: Partial<Snapshot>) => {
     let changed = false
@@ -88,7 +87,9 @@ export function createStore(ctx: PluginContext): Store {
   // --- Visibility: poll only while the pane is on screen ---
 
   const documentVisible = () => typeof document === 'undefined' || document.visibilityState !== 'hidden'
-  const isActive = () => probes.size > 0 && paneVisible && documentVisible()
+  // The host's visibility signal only prompts a refresh. It never stops one: a host that reports a
+  // visible pane as hidden would otherwise leave it empty. The DOM probe decides what is on screen.
+  const isActive = () => probes.size > 0 && documentVisible()
 
   /** The pane stays mounted behind another tab, so also ask the DOM before each request. */
   const onScreen = () => {
@@ -173,7 +174,8 @@ export function createStore(ctx: PluginContext): Store {
     pollMs = want
     if (want > 0) {
       stopPoll = ctx.setInterval(() => {
-        if (isActive() && onScreen()) void refresh()
+        // Until the first state arrives the pane asks regardless, so it can never stay on its placeholder.
+        if (isActive() && (snapshot.state === null || onScreen())) void refresh()
       }, want)
     }
   }
@@ -239,13 +241,7 @@ export function createStore(ctx: PluginContext): Store {
   try {
     const visibility = typeof host.paneVisibility === 'function' ? host.paneVisibility(`${PLUGIN_ID}:${PANE_ID}`) : null
     if (visibility) {
-      paneVisible = visibility.get() !== false
-      ctx.onDispose(
-        visibility.listen(value => {
-          paneVisible = value !== false
-          onActivityChange()
-        })
-      )
+      ctx.onDispose(visibility.listen(() => onActivityChange()))
     }
   } catch {
     // Older desktops: the DOM probe in the poll tick covers a pane hidden behind another tab.
