@@ -331,17 +331,18 @@ decimal strings in token units, such as `"100"` or `"0.25"`. Tokens are symbols.
 |---|---|
 | list-pools | `sovereign_quote({network, kind: "pools", limit?})`. The rows come ranked, each marked inside or outside the session scope. |
 | size-range | `sovereign_quote({network, kind: "lp-plan", pool, rangePct, budget})`, or `tickLower` and `tickUpper` in place of `rangePct`. Read the range from the result and send nothing. |
-| enter | The same `lp-plan` quote with `budget` as `{symbol, amount}` and an optional `slippageBps`, then `sovereign_execute({network, actions})` with the returned `actions`. |
+| enter | One call: `sovereign_execute({network, open: {pair, fee, budget: {symbol, amount}, rangePct}})`. The plugin plans and builds the batch. To preview first, take the `lp-plan` quote and then `sovereign_execute({network, planId})`. |
 | check-range | `sovereign_positions({network})`. Each row has `tokenId`, `pool`, `pair`, `fee`, `tickLower`, `tickUpper`, `currentTick`, `inRange`, `amounts`, `unclaimedFees` and prices. |
-| rebalance | `sovereign_quote({network, kind: "exit-plan", tokenId})`, `sovereign_execute`, then the `lp-plan` quote with `budget: "balances"`, `sovereign_execute`. |
+| rebalance | `sovereign_execute({network, close: {tokenId}})`, then `sovereign_execute({network, open: {pair, fee, budget: "balances", rangePct}})`. |
 | collect-fees | `sovereign_execute({network, actions})` with one `collect` action for the tokenId. |
 
 - Start with `sovereign_status({network})`: wallet address, mode, balances, session
   status, expiry, scope and caps. If the session is missing or expired, or lacks a token
   or a cap the play needs, tell the user what to grant. Granting takes the user's
   passkey. The agent holds only the session key.
-- Pass the `actions` array from a quote to `sovereign_execute` unchanged. Then call
-  `sovereign_positions({network})` and report what it shows.
+- Run a plan through `open`, `close` or its `planId`. Do not copy or edit an `actions`
+  array: a missing step makes the batch fail. Then call `sovereign_positions({network})`
+  and report what it shows.
 - `sovereign_execute` sends one batch with the session key. The plugin encodes the typed
   actions `wrap`, `unwrap`, `swap`, `mint`, `increase`, `decrease`, `collect` and `burn`
   and sets every recipient to the wallet.

@@ -26,8 +26,9 @@ SCHEMAS = [
     {
         "name": "sovereign_quote",
         "description": ("Read-only planning. kind=pools lists the most traded V3 pools with fee tier, TVL and fee APR. "
-                        "kind=swap quotes a swap. kind=lp-plan sizes a range and returns the exact actions to open a position. "
-                        "kind=exit-plan returns the actions that close a position. Pass a returned actions array unchanged to sovereign_execute."),
+                        "kind=swap quotes a swap. kind=lp-plan sizes a range for a new position and kind=exit-plan prepares closing one: "
+                        "both return a planId, and sovereign_execute runs it from that id. To open or close without a preview, "
+                        "skip this tool and call sovereign_execute with `open` or `close`."),
         "parameters": {
             "type": "object",
             "properties": {
@@ -39,6 +40,7 @@ SCHEMAS = [
                 "amountIn": {"type": "string", "description": "swap: amount to sell, in token units, as a decimal string."},
                 "fee": {"type": "integer", "description": "swap, lp-plan: fee tier in hundredths of a basis point, for example 500 for 0.05%."},
                 "pool": {"type": "string", "description": "lp-plan: pool address. Alternative to token0, token1 and fee."},
+                "pair": {"type": "string", "description": 'lp-plan: the pair, like "USDT/WBNB". Alternative to token0 and token1.'},
                 "token0": {"type": "string", "description": "lp-plan: one token symbol of the pair."},
                 "token1": {"type": "string", "description": "lp-plan: the other token symbol of the pair."},
                 "rangePct": {"type": "number", "description": "lp-plan: half-width of the range as a percentage of the current price. Default 1."},
@@ -53,21 +55,28 @@ SCHEMAS = [
     },
     {
         "name": "sovereign_execute",
-        "description": ("Send one batch of actions from the wallet with the agent's session key. Action types: wrap, unwrap, swap, mint, "
-                        "increase, decrease, collect, burn. The plugin encodes them, adds exact approvals in the same batch and makes the wallet "
-                        "the recipient of everything. Get the actions from sovereign_quote rather than writing them by hand. The user is asked to "
-                        "approve each batch. Two more action types reach outside the V3 LP scope: {type: transfer, token, to, amount} sends a token "
-                        "or the native coin to an address, and {type: raw, to, data, value} sends any call. The wallet refuses both onchain unless "
-                        "the session was granted them. If the wallet refuses a batch, report the refusal and do not look for another route."),
+        "description": ("Send one batch from the wallet with the agent's session key. The user is asked to approve it. "
+                        "Fastest way, one call and no planning step: pass `open` to open a liquidity position, or `close` to close one, "
+                        "and the plugin builds the whole batch (wrap, swap, approvals, mint). "
+                        'Example: {"network": "bnb", "open": {"pair": "USDT/WBNB", "fee": 500, "budget": {"symbol": "BNB", "amount": "0.004"}, "rangePct": 3}}. '
+                        'Example: {"network": "bnb", "close": {"tokenId": "123"}}. '
+                        "Or pass the `planId` that sovereign_quote returned. Do not rebuild or edit an actions array yourself. "
+                        "`actions` is only for a single step such as {type: wrap, amount}, or for a call outside the session's scope: "
+                        "{type: transfer, token, to, amount} or {type: raw, to, data, value}, which the wallet refuses onchain unless the session "
+                        "was granted them. If the wallet refuses a batch, report the refusal and do not look for another route."),
         "parameters": {
             "type": "object",
             "properties": {
                 "network": _NETWORK,
-                "actions": {"type": "array", "minItems": 1, "maxItems": 12, "items": {"type": "object", "properties": {"type": {"type": "string"}}, "required": ["type"]},
-                            "description": "The batch, in order. Amounts are decimal strings in token units and tokens are symbols."},
+                "open": {"type": "object", "description": ('Open a position. pair like "USDT/WBNB" (or pool address), fee tier (500 means 0.05%; omit for the deepest pool), '
+                                                         'budget {"symbol": "BNB", "amount": "0.004"} or "balances", and rangePct (half-width in percent) '
+                                                         "or tickLower and tickUpper.")},
+                "close": {"type": "object", "description": 'Close a position and collect everything: {"tokenId": "123"}.'},
+                "planId": {"type": "string", "description": "The planId from a sovereign_quote lp-plan or exit-plan, valid for ten minutes."},
+                "actions": {"type": "array", "maxItems": 12, "items": {"type": "object", "properties": {"type": {"type": "string"}}, "required": ["type"]},
+                            "description": "A hand-written batch, in order. Amounts are decimal strings in token units and tokens are symbols."},
             },
-            "required": ["network", "actions"],
-            "additionalProperties": False,
+            "required": ["network"],
         },
     },
     {
@@ -113,8 +122,13 @@ def sovereign_quote(args: dict, **_kw) -> str:
     return _out(cli.run("quote", payload, network=_network(args), timeout=_TIMEOUTS["quote"]))
 
 
+def batch_payload(args: dict) -> dict:
+    """What a sovereign_execute call asks for, in the shape the CLI takes. The approval hook sends the same."""
+    return {key: args[key] for key in ("actions", "planId", "open", "close") if args.get(key)}
+
+
 def sovereign_execute(args: dict, **_kw) -> str:
-    envelope = cli.run("execute", {"actions": args.get("actions")}, network=_network(args), timeout=_TIMEOUTS["execute"])
+    envelope = cli.run("execute", batch_payload(args), network=_network(args), timeout=_TIMEOUTS["execute"])
     if envelope.get("ok") and isinstance(envelope.get("data"), dict) and envelope["data"].get("ok") is False:
         data = envelope["data"]
         error = data.get("error") or {}

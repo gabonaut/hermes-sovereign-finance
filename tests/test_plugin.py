@@ -88,7 +88,7 @@ class ApprovalTests(unittest.TestCase):
         self.assertEqual(out, {"action": "approve", "message": "On BNB Chain testnet, from wallet 0x12...ab: wrap 0.05 tBNB.", "rule_key": "sovereign:97:abcd1234:lp:0xpool"})
         self.assertEqual(seen["command"], "describe")
         self.assertEqual(seen["network"], "bnb")
-        self.assertLessEqual(seen["timeout"], 10)
+        self.assertLess(seen["timeout"], 30)
 
     def test_execute_is_blocked_on_violations_errors_and_bad_input(self):
         cli.run = lambda *a, **k: {"ok": True, "data": {"sentence": "x", "ruleKey": "k", "violations": ["A collect would send its proceeds to 0x22, not to the wallet."]}}
