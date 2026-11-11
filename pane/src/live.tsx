@@ -111,11 +111,15 @@ function SessionCard({ network, session }: { network: NetworkState; session: Ses
   const expiry = session.expiry > 0 ? session.expiry * 1000 : null
   const asOf = parseTime(network.asOf)
   const canRevoke = session.status !== 'revoked' && session.status !== 'expired'
+  const holding = network.positions.length > 0
 
   return (
-    <li className="sf-card" data-status={session.status}>
+    <li className="sf-card" data-net={network.key} data-status={session.status}>
       <div className="sf-card-head">
-        <span className="sf-card-net">{network.name}</span>
+        <span className="sf-card-net">
+          <span className="sf-net-dot" />
+          {network.name}
+        </span>
         <span className="sf-card-status">
           <StatusDot tone={status.tone} />
           {status.label}
@@ -146,12 +150,26 @@ function SessionCard({ network, session }: { network: NetworkState; session: Ses
         </div>
       ) : null}
 
-      {session.scopeText.length > 0 ? (
-        <ul className="sf-scope">
-          {session.scopeText.map((line, i) => (
-            <li key={i}>{line}</li>
+      {holding === false && session.status === 'active' ? <Plays network={network} stage="start" /> : null}
+
+      {network.positions.length > 0 ? (
+        <ul className="sf-positions">
+          {network.positions.map(position => (
+            <PositionBlock dex={network.dex} key={position.tokenId || position.pair} position={position} />
           ))}
         </ul>
+      ) : null}
+      {holding && session.status === 'active' ? <Plays network={network} stage="holding" /> : null}
+
+      {session.scopeText.length > 0 ? (
+        <details className="sf-more" open={session.status !== 'active' || undefined}>
+          <summary>What the agent may do</summary>
+          <ul className="sf-scope">
+            {session.scopeText.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        </details>
       ) : null}
 
       <div className="sf-card-foot">
@@ -167,17 +185,6 @@ function SessionCard({ network, session }: { network: NetworkState; session: Ses
           <ExtLink href={session.revokeTxUrl}>Revoke transaction</ExtLink>
         </span>
       </div>
-
-      {network.positions.length > 0 ? (
-        <ul className="sf-positions">
-          {network.positions.map(position => (
-            <PositionBlock dex={network.dex} key={position.tokenId || position.pair} position={position} />
-          ))}
-        </ul>
-      ) : session.status === 'active' ? (
-        <p className="sf-empty">No position yet.</p>
-      ) : null}
-      {session.status === 'active' ? <Plays network={network} /> : null}
 
       <ConfirmDialog
         confirmLabel="Revoke"

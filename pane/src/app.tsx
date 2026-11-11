@@ -187,6 +187,7 @@ export function Pane({ ctx, store }: { ctx: PluginContext; store: Store }) {
     [mode]
   )
 
+  const working = state?.networks.some(n => n.session?.status === 'active') ?? false
   let body
   if (error?.forbidden) {
     body = <FailedBody message={error.message} onRetry={store.refresh} title="Local Desktop only" />
@@ -196,8 +197,10 @@ export function Pane({ ctx, store }: { ctx: PluginContext; store: Store }) {
     body = (
       <div className="sf-content" data-busy={jobIsActive(job) || undefined} data-pending={pendingMode !== null || undefined}>
         {error ? <Warning>Not refreshed. {error.message}</Warning> : null}
+        {/* Once the agent has a session, what it is doing comes first and the setup steps follow. */}
+        {working ? <LiveSection networks={state.networks} /> : null}
         <Steps draft={draft} onDraft={onDraft} onWithdraw={() => setWithdrawing(true)} state={state} />
-        <LiveSection networks={state.networks} />
+        {working ? null : <LiveSection networks={state.networks} />}
       </div>
     )
   }

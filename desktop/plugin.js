@@ -977,6 +977,7 @@ import { useId, useState as useState3 } from "react";
 var PLAYS = [
   {
     id: "find",
+    when: "both",
     title: "Find a pool",
     blurb: "Ranks the most traded pools by fee income and suggests one.",
     actions: [
@@ -988,6 +989,7 @@ var PLAYS = [
   },
   {
     id: "open",
+    when: "both",
     title: "Open a position",
     blurb: "Wraps, swaps half and provides liquidity around the current price, in one batch.",
     sized: true,
@@ -1000,6 +1002,7 @@ var PLAYS = [
   },
   {
     id: "keep",
+    when: "holding",
     title: "Keep it in range",
     blurb: "Closes a position the price has left and reopens it around the current price.",
     actions: [
@@ -1015,6 +1018,7 @@ var PLAYS = [
   },
   {
     id: "compound",
+    when: "holding",
     title: "Compound fees",
     blurb: "Collects the fees a position has earned and adds them back to it.",
     actions: [
@@ -1023,6 +1027,7 @@ var PLAYS = [
   },
   {
     id: "exit",
+    when: "holding",
     title: "Cash out",
     blurb: "Closes every position and swaps everything back to the native coin.",
     actions: [
@@ -1065,7 +1070,7 @@ var NOTE = {
   copied: "Copied. Paste it into a chat and send it.",
   failed: "Open a chat first, then press the button again."
 };
-function Plays({ network: network2 }) {
+function Plays({ network: network2, stage }) {
   const uid = useId();
   const defaults = defaultsFor(network2);
   const [amount, setAmount] = useState3(defaults.amount);
@@ -1082,12 +1087,12 @@ function Plays({ network: network2 }) {
   const run = async (play, request) => {
     setNote({ id: play.id, kind: await hand(request(context)) });
   };
-  return /* @__PURE__ */ jsxs5("section", { className: "sf-plays", children: [
+  return /* @__PURE__ */ jsxs5("section", { className: "sf-plays", "data-stage": stage, children: [
     /* @__PURE__ */ jsxs5("div", { className: "sf-plays-head", children: [
-      /* @__PURE__ */ jsx5("span", { className: "sf-strong", children: "Ask the agent" }),
+      /* @__PURE__ */ jsx5("span", { className: "sf-strong", children: stage === "start" ? "Next: put the agent to work" : "Ask the agent" }),
       /* @__PURE__ */ jsx5("span", { className: "sf-hint", children: "A button writes the request into the chat box. You send it." })
     ] }),
-    /* @__PURE__ */ jsx5("ul", { className: "sf-play-list", children: PLAYS.map((play) => /* @__PURE__ */ jsxs5("li", { className: "sf-play", children: [
+    /* @__PURE__ */ jsx5("ul", { className: "sf-play-list", children: PLAYS.filter((play) => play.when === "both" || play.when === stage).map((play) => /* @__PURE__ */ jsxs5("li", { className: "sf-play", children: [
       /* @__PURE__ */ jsxs5("div", { className: "sf-play-text", children: [
         /* @__PURE__ */ jsx5("span", { className: "sf-play-title", children: play.title }),
         /* @__PURE__ */ jsx5("span", { className: "sf-play-blurb", children: play.blurb }),
@@ -1118,7 +1123,17 @@ function Plays({ network: network2 }) {
         ] }) : null,
         note?.id === play.id ? /* @__PURE__ */ jsx5("span", { className: "sf-play-note", children: NOTE[note.kind] }) : null
       ] }),
-      /* @__PURE__ */ jsx5("div", { className: "sf-play-actions", children: play.actions.map((action) => /* @__PURE__ */ jsx5(Button2, { onClick: () => void run(play, action.request), size: "sm", type: "button", variant: "outline", children: action.label }, action.label)) })
+      /* @__PURE__ */ jsx5("div", { className: "sf-play-actions", children: play.actions.map((action) => /* @__PURE__ */ jsx5(
+        Button2,
+        {
+          onClick: () => void run(play, action.request),
+          size: "sm",
+          type: "button",
+          variant: stage === "start" && play.id === "open" ? "default" : "outline",
+          children: action.label
+        },
+        action.label
+      )) })
     ] }, play.id)) })
   ] });
 }
@@ -1211,9 +1226,13 @@ function SessionCard({ network: network2, session: session2 }) {
   const expiry = session2.expiry > 0 ? session2.expiry * 1e3 : null;
   const asOf = parseTime(network2.asOf);
   const canRevoke = session2.status !== "revoked" && session2.status !== "expired";
-  return /* @__PURE__ */ jsxs6("li", { className: "sf-card", "data-status": session2.status, children: [
+  const holding = network2.positions.length > 0;
+  return /* @__PURE__ */ jsxs6("li", { className: "sf-card", "data-net": network2.key, "data-status": session2.status, children: [
     /* @__PURE__ */ jsxs6("div", { className: "sf-card-head", children: [
-      /* @__PURE__ */ jsx6("span", { className: "sf-card-net", children: network2.name }),
+      /* @__PURE__ */ jsxs6("span", { className: "sf-card-net", children: [
+        /* @__PURE__ */ jsx6("span", { className: "sf-net-dot" }),
+        network2.name
+      ] }),
       /* @__PURE__ */ jsxs6("span", { className: "sf-card-status", children: [
         /* @__PURE__ */ jsx6(StatusDot, { tone: status.tone }),
         status.label
@@ -1238,7 +1257,13 @@ function SessionCard({ network: network2, session: session2 }) {
       ] }),
       /* @__PURE__ */ jsx6("span", { className: "sf-dim", children: relativeTime(expiry, now) })
     ] }) : null,
-    session2.scopeText.length > 0 ? /* @__PURE__ */ jsx6("ul", { className: "sf-scope", children: session2.scopeText.map((line, i) => /* @__PURE__ */ jsx6("li", { children: line }, i)) }) : null,
+    holding === false && session2.status === "active" ? /* @__PURE__ */ jsx6(Plays, { network: network2, stage: "start" }) : null,
+    network2.positions.length > 0 ? /* @__PURE__ */ jsx6("ul", { className: "sf-positions", children: network2.positions.map((position2) => /* @__PURE__ */ jsx6(PositionBlock, { dex: network2.dex, position: position2 }, position2.tokenId || position2.pair)) }) : null,
+    holding && session2.status === "active" ? /* @__PURE__ */ jsx6(Plays, { network: network2, stage: "holding" }) : null,
+    session2.scopeText.length > 0 ? /* @__PURE__ */ jsxs6("details", { className: "sf-more", open: session2.status !== "active" || void 0, children: [
+      /* @__PURE__ */ jsx6("summary", { children: "What the agent may do" }),
+      /* @__PURE__ */ jsx6("ul", { className: "sf-scope", children: session2.scopeText.map((line, i) => /* @__PURE__ */ jsx6("li", { children: line }, i)) })
+    ] }) : null,
     /* @__PURE__ */ jsxs6("div", { className: "sf-card-foot", children: [
       session2.keyId ? /* @__PURE__ */ jsxs6("span", { className: "sf-card-key", children: [
         /* @__PURE__ */ jsx6("span", { className: "sf-dim", children: "Session key" }),
@@ -1250,8 +1275,6 @@ function SessionCard({ network: network2, session: session2 }) {
         /* @__PURE__ */ jsx6(ExtLink, { href: session2.revokeTxUrl, children: "Revoke transaction" })
       ] })
     ] }),
-    network2.positions.length > 0 ? /* @__PURE__ */ jsx6("ul", { className: "sf-positions", children: network2.positions.map((position2) => /* @__PURE__ */ jsx6(PositionBlock, { dex: network2.dex, position: position2 }, position2.tokenId || position2.pair)) }) : session2.status === "active" ? /* @__PURE__ */ jsx6("p", { className: "sf-empty", children: "No position yet." }) : null,
-    session2.status === "active" ? /* @__PURE__ */ jsx6(Plays, { network: network2 }) : null,
     /* @__PURE__ */ jsx6(
       ConfirmDialog2,
       {
@@ -2613,6 +2636,16 @@ button.sf-step-head:hover .sf-step-caret{color:var(--sf-fg)}
 .sf-section-title{font-size:13px;font-weight:600}
 .sf-cards{display:flex;flex-direction:column;gap:12px}
 .sf-plays{display:flex;flex-direction:column;gap:6px;margin-top:4px;padding-top:10px;border-top:1px solid var(--sf-line)}
+.sf-plays[data-stage=start]{margin-top:2px;padding:10px 12px 4px;border:1px solid color-mix(in srgb,var(--sf-accent) 45%,transparent);border-radius:6px;background:color-mix(in srgb,var(--sf-accent) 7%,transparent)}
+.sf-plays[data-stage=start] .sf-plays-head .sf-strong{font-size:13.5px}
+.sf-card[data-net=bnb]{--sf-net:#e0a800}
+.sf-card[data-net=ethereum]{--sf-net:#627eea}
+.sf-card[data-net]{border-left:3px solid var(--sf-net);background:color-mix(in srgb,var(--sf-net) 4%,transparent)}
+.sf-card-net{display:inline-flex;align-items:center;gap:6px}
+.sf-net-dot{width:8px;height:8px;border-radius:50%;background:var(--sf-net,var(--sf-fg3))}
+.sf-more{border-top:1px solid var(--sf-line);padding-top:8px}
+.sf-more summary{cursor:pointer;color:var(--sf-fg2);font-size:12px;list-style-position:inside}
+.sf-more[open] summary{margin-bottom:6px}
 .sf-plays-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
 .sf-play-list{display:flex;flex-direction:column;gap:0;margin:0;padding:0;list-style:none}
 .sf-play{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-top:1px solid color-mix(in srgb,var(--sf-line) 60%,transparent)}
@@ -2990,6 +3023,7 @@ function Pane({ ctx, store }) {
     (next) => setGrantDraft(next && mode ? { mode, draft: next } : null),
     [mode]
   );
+  const working = state?.networks.some((n) => n.session?.status === "active") ?? false;
   let body;
   if (error?.forbidden) {
     body = /* @__PURE__ */ jsx11(FailedBody, { message: error.message, onRetry: store.refresh, title: "Local Desktop only" });
@@ -3001,8 +3035,9 @@ function Pane({ ctx, store }) {
         "Not refreshed. ",
         error.message
       ] }) : null,
+      working ? /* @__PURE__ */ jsx11(LiveSection, { networks: state.networks }) : null,
       /* @__PURE__ */ jsx11(Steps, { draft, onDraft, onWithdraw: () => setWithdrawing(true), state }),
-      /* @__PURE__ */ jsx11(LiveSection, { networks: state.networks })
+      working ? null : /* @__PURE__ */ jsx11(LiveSection, { networks: state.networks })
     ] });
   }
   return /* @__PURE__ */ jsxs11(PaneContext.Provider, { value: env, children: [

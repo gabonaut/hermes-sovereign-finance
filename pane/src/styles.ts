@@ -216,6 +216,16 @@ button.sf-step-head:hover .sf-step-caret{color:var(--sf-fg)}
 .sf-section-title{font-size:13px;font-weight:600}
 .sf-cards{display:flex;flex-direction:column;gap:12px}
 .sf-plays{display:flex;flex-direction:column;gap:6px;margin-top:4px;padding-top:10px;border-top:1px solid var(--sf-line)}
+.sf-plays[data-stage=start]{margin-top:2px;padding:10px 12px 4px;border:1px solid color-mix(in srgb,var(--sf-accent) 45%,transparent);border-radius:6px;background:color-mix(in srgb,var(--sf-accent) 7%,transparent)}
+.sf-plays[data-stage=start] .sf-plays-head .sf-strong{font-size:13.5px}
+.sf-card[data-net=bnb]{--sf-net:#e0a800}
+.sf-card[data-net=ethereum]{--sf-net:#627eea}
+.sf-card[data-net]{border-left:3px solid var(--sf-net);background:color-mix(in srgb,var(--sf-net) 4%,transparent)}
+.sf-card-net{display:inline-flex;align-items:center;gap:6px}
+.sf-net-dot{width:8px;height:8px;border-radius:50%;background:var(--sf-net,var(--sf-fg3))}
+.sf-more{border-top:1px solid var(--sf-line);padding-top:8px}
+.sf-more summary{cursor:pointer;color:var(--sf-fg2);font-size:12px;list-style-position:inside}
+.sf-more[open] summary{margin-bottom:6px}
 .sf-plays-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
 .sf-play-list{display:flex;flex-direction:column;gap:0;margin:0;padding:0;list-style:none}
 .sf-play{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-top:1px solid color-mix(in srgb,var(--sf-line) 60%,transparent)}

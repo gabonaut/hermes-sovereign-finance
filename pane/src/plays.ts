@@ -19,6 +19,8 @@ export interface Play {
   id: string
   title: string
   blurb: string
+  /** When it is offered: before the wallet holds a position, once it does, or both. */
+  when: 'start' | 'holding' | 'both'
   /** Shows the amount and range fields. */
   sized?: boolean
   /** Buttons, each with the request it writes. */
@@ -28,6 +30,7 @@ export interface Play {
 export const PLAYS: Play[] = [
   {
     id: 'find',
+    when: 'both',
     title: 'Find a pool',
     blurb: 'Ranks the most traded pools by fee income and suggests one.',
     actions: [
@@ -40,6 +43,7 @@ export const PLAYS: Play[] = [
   },
   {
     id: 'open',
+    when: 'both',
     title: 'Open a position',
     blurb: 'Wraps, swaps half and provides liquidity around the current price, in one batch.',
     sized: true,
@@ -53,6 +57,7 @@ export const PLAYS: Play[] = [
   },
   {
     id: 'keep',
+    when: 'holding',
     title: 'Keep it in range',
     blurb: 'Closes a position the price has left and reopens it around the current price.',
     actions: [
@@ -69,6 +74,7 @@ export const PLAYS: Play[] = [
   },
   {
     id: 'compound',
+    when: 'holding',
     title: 'Compound fees',
     blurb: 'Collects the fees a position has earned and adds them back to it.',
     actions: [
@@ -77,6 +83,7 @@ export const PLAYS: Play[] = [
   },
   {
     id: 'exit',
+    when: 'holding',
     title: 'Cash out',
     blurb: 'Closes every position and swaps everything back to the native coin.',
     actions: [
