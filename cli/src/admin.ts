@@ -135,8 +135,8 @@ async function costOf(chain: Chain, wallet: Address, permissions: SessionPermiss
       nativeSymbol: chain.nativeSymbol,
       firstAction,
     },
-    /** Passkey approvals this activation takes on this network. */
-    approvals: stages,
+    /** Passkey approvals this activation takes on this network. A new wallet under a storage budget is set up in a step of its own. */
+    approvals: stages + (chain.storageBudget && firstAction ? 1 : 0),
     balance: formatUnits(balance, 18),
     sufficient: balance >= total,
     keystoreFeeRaw: keystoreFee,
@@ -170,11 +170,15 @@ function adminSigner(wallet: WalletRecord, fns: ReturnType<typeof webAuthnFns>) 
   return signerFromPasskey(wallet.credential, { webAuthn: fns });
 }
 
+/** Where the setup step's empty call goes. It carries no value and no data. */
+const SETUP_TARGET = "0x000000000000000000000000000000000000dEaD";
+
 /** How many passkey approvals an activation takes, as a sentence for the approval page. */
 function approvalsText(mode: Mode, draft: any, keys: NetworkKey[]): string {
   const counts = keys.map((k) => {
     const chain = chainFor(mode, k);
-    return { name: chain.name, n: planStages(compilePolicy(chain, draft.inputs[k], draft.expiry).permissions, chain.storageBudget).length };
+    const n = Number(draft.networks?.[k]?.approvals) || planStages(compilePolicy(chain, draft.inputs[k], draft.expiry).permissions, chain.storageBudget).length;
+    return { name: chain.name, n };
   });
   if (counts.every((c) => c.n === 1)) return "You will approve with your passkey once per network.";
   const total = counts.reduce((sum, c) => sum + c.n, 0);
@@ -251,6 +255,21 @@ export async function activate(ctx: AdminCtx, input: { draftId: string; networks
         // One grant on most networks. Where a storage budget applies, the same key is granted in stages.
         const stages = planStages(policy.permissions, chain.storageBudget);
         const before = await nativeBalance(chain, wallet.address);
+        // A wallet's first transaction on a network also sets it up there and registers the passkey's
+        // key in the Keystore. Under a storage budget that fills a transaction by itself, so it goes first.
+        if (chain.storageBudget && (await keystoreKeys(chain, wallet.address)).length === 0) {
+          ctx.job.step(`Setting up the wallet on ${chain.name}`);
+          say(`Set up your wallet on ${chain.name}. This one-time step registers your passkey's key in the Keystore. It moves no funds.`);
+          let setup;
+          try {
+            setup = await client.execute({ wallet: { address: wallet.address }, signer, calls: [{ to: SETUP_TARGET, value: 0n, data: "0x" }] as any, chainId: chain.chainId });
+          } catch (e) {
+            const f = decodeFailure(e);
+            ctx.log(`setup ${chain.name} failed: ${f.raw}`);
+            throw new CliError("SETUP_FAILED", `The wallet could not be set up on ${chain.name}. ${f.code === "RELAY_REJECTED" ? relayDropped(chain.relayNote) : f.message} Activate again to retry.`);
+          }
+          if (setup.status === "FAILED") throw new CliError("SETUP_FAILED", `The wallet could not be set up on ${chain.name}. ${relayDropped(chain.relayNote)} Activate again to retry.`);
+        }
         const hashes: string[] = [...(record!.grantTxs ?? [])];
         for (let i = record!.stagesDone ?? 0; i < stages.length; i++) {
           const stage = stages[i];
