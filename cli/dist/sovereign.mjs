@@ -20192,6 +20192,23 @@ function ownError(e, depth = 0) {
   if (e instanceof CliError) return e;
   return ownError(e.cause, depth + 1);
 }
+var REASONS = {
+  STF: "the wallet does not hold enough of a token this batch spends. Check the balances, and wrap or swap first if the plan had those steps",
+  "Too little received": "the swap would return less than the minimum set for it. Ask for a fresh plan",
+  "Price slippage check": "the pool price moved past the plan's limits. Ask for a fresh plan",
+  "Transaction too old": "the plan's deadline has passed. Ask for a fresh plan"
+};
+function revertText(raw) {
+  const m = /08c379a0([0-9a-fA-F]{128,})/.exec(raw);
+  if (!m) return null;
+  try {
+    const length = Number(BigInt("0x" + m[1].slice(64, 128)));
+    if (length <= 0 || length > 200) return null;
+    return Buffer.from(m[1].slice(128, 128 + length * 2), "hex").toString("utf8").replace(/[^\x20-\x7e]/g, "").trim() || null;
+  } catch {
+    return null;
+  }
+}
 function relayDropped(note) {
   const base2 = "The relay dropped this batch without sending a transaction, so nothing was charged. The usual causes are a native cap or balance too low for the relay fee, or a batch that needs more gas than the relay allowed.";
   return note ? `${base2} ${note}` : base2;
@@ -20201,6 +20218,11 @@ function decodeFailure(e) {
   if (own2) return { code: own2.code, message: own2.message, revert: null, relayCode: null, raw: own2.message };
   const parts = [...new Set(collectText(e))];
   const raw = parts.join(" | ").slice(0, 4e3);
+  const reason = revertText(raw);
+  if (reason) {
+    const why = REASONS[reason] ?? `a contract in the batch reverted with "${reason}"`;
+    return { code: "BATCH_WOULD_REVERT", message: `Nothing was sent: ${why}.`, revert: reason, relayCode: null, raw };
+  }
   let revert = null;
   for (const name of Object.values(ERROR_SIGNATURES)) {
     if (new RegExp(`\\b${name}\\b`).test(raw)) {
@@ -47895,6 +47917,9 @@ async function listPositions(store, chain, wallet) {
   return out;
 }
 
+// src/plans.ts
+import crypto5 from "node:crypto";
+
 // src/quote.ts
 var bps = (n, fallback) => {
   const v = n === void 0 || n === null ? fallback : Number(n);
@@ -48220,8 +48245,141 @@ async function exitPlan(chain, wallet, input2) {
   return { tokenId: id.toString(), pair: `${t0.symbol}/${t1.symbol}`, fee: Number(fee), actions, notes: ['Pass `actions` unchanged to sovereign_execute. To re-enter, ask for an lp-plan with budget "balances" afterwards.'] };
 }
 
+// src/plans.ts
+var PLAN_TTL_MS = 10 * 60 * 1e3;
+var EXAMPLE = '{"pair": "USDT/WBNB", "fee": 500, "budget": {"symbol": "BNB", "amount": "0.004"}, "rangePct": 3}';
+var NATIVE_NAMES = /* @__PURE__ */ new Set(["native", "bnb", "tbnb", "eth", "sepoliaeth", "ether"]);
+function symbolOf(chain, text2) {
+  const raw = String(text2 ?? "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  if (lower === chain.nativeSymbol.toLowerCase() || NATIVE_NAMES.has(lower)) return chain.nativeSymbol;
+  const hit = [chain.wrappedNative, ...chain.assets].find((a) => a.symbol.toLowerCase() === lower);
+  return hit ? hit.symbol : raw;
+}
+function feeOf(value) {
+  if (value === void 0 || value === null || value === "") return void 0;
+  const text2 = String(value).trim();
+  const n = Number(text2.replace("%", ""));
+  if (!Number.isFinite(n) || n <= 0) throw new CliError("BAD_INPUT", `fee "${value}" is not a fee tier. Use 500 for 0.05%.`);
+  return text2.includes("%") || n < 10 ? Math.round(n * 1e4) : Math.round(n);
+}
+function budgetOf(chain, value) {
+  if (value === void 0 || value === null) return void 0;
+  if (typeof value === "string") {
+    const text2 = value.trim();
+    if (text2.toLowerCase() === "balances") return "balances";
+    const m = /^([0-9]*\.?[0-9]+)\s*([A-Za-z]+)$/.exec(text2);
+    if (m) return { symbol: symbolOf(chain, m[2]), amount: m[1] };
+    throw new CliError("BAD_INPUT", `budget "${value}" is not understood. Use {"symbol": "${chain.nativeSymbol}", "amount": "0.004"} or "balances".`);
+  }
+  if (typeof value === "object") {
+    const v = value;
+    const symbol2 = symbolOf(chain, v.symbol ?? v.token ?? v.asset ?? v.currency);
+    const amount = v.amount ?? v.value;
+    if (symbol2 && amount !== void 0) return { symbol: symbol2, amount: String(amount).trim() };
+  }
+  throw new CliError("BAD_INPUT", `budget needs a symbol and an amount, for example {"symbol": "${chain.nativeSymbol}", "amount": "0.004"}, or the string "balances".`);
+}
+async function normalizeOpen(chain, raw) {
+  if (!raw || typeof raw !== "object") throw new CliError("BAD_INPUT", `Say which position to open, for example ${EXAMPLE}.`);
+  const out = {};
+  let a = raw.token0 ?? raw.tokenA;
+  let b = raw.token1 ?? raw.tokenB;
+  if (raw.pair && (!a || !b)) [a, b] = String(raw.pair).split(/[\/\-\s,]+/).filter(Boolean);
+  if (raw.pool && /^0x[0-9a-fA-F]{40}$/.test(String(raw.pool).trim())) out.pool = String(raw.pool).trim();
+  else if (a && b) {
+    out.token0 = symbolOf(chain, a) === chain.nativeSymbol ? chain.wrappedNative.symbol : symbolOf(chain, a);
+    out.token1 = symbolOf(chain, b) === chain.nativeSymbol ? chain.wrappedNative.symbol : symbolOf(chain, b);
+    let fee = feeOf(raw.fee ?? raw.feeTier);
+    if (fee === void 0) fee = await deepestTier(chain, String(out.token0), String(out.token1));
+    out.fee = fee;
+  } else throw new CliError("BAD_INPUT", `Name the pool by its address, or by pair and fee, for example ${EXAMPLE}.`);
+  const budget = budgetOf(chain, raw.budget ?? (raw.amount !== void 0 ? { symbol: raw.symbol ?? raw.token ?? chain.nativeSymbol, amount: raw.amount } : void 0));
+  if (budget === void 0) throw new CliError("BAD_INPUT", `Say what to fund the position with, for example "budget": {"symbol": "${chain.nativeSymbol}", "amount": "0.004"}.`);
+  out.budget = budget;
+  const lower = raw.tickLower ?? raw.lowerTick;
+  const upper = raw.tickUpper ?? raw.upperTick;
+  if (lower !== void 0 && upper !== void 0) {
+    out.tickLower = Number(lower);
+    out.tickUpper = Number(upper);
+  } else {
+    const pct = raw.rangePct ?? raw.range ?? raw.rangePercent;
+    if (pct !== void 0) out.rangePct = Number(String(pct).replace("%", ""));
+  }
+  if (raw.slippageBps !== void 0) out.slippageBps = Number(raw.slippageBps);
+  return out;
+}
+async function deepestTier(chain, s0, s1) {
+  const find = (s) => [chain.wrappedNative, ...chain.assets].find((x2) => x2.symbol === s);
+  const x = find(s0);
+  const y = find(s1);
+  if (!x || !y) throw new CliError("BAD_INPUT", `${!x ? s0 : s1} is not a token this plugin knows on ${chain.name}. Known: ${chain.assets.map((t) => t.symbol).join(", ")}.`);
+  const [t0, t1] = sortAssets(x, y);
+  let best = null;
+  for (const fee of chain.dex.feeTiers) {
+    const state = await poolState(chain, poolAddress(chain, t0.address, t1.address, fee)).catch(() => null);
+    if (state && state.liquidity > 0n && (!best || state.liquidity > best.liquidity)) best = { fee, liquidity: state.liquidity };
+  }
+  if (!best) throw new CliError("NO_POOL", `There is no ${s0}/${s1} pool with liquidity on ${chain.dex.name}.`);
+  return best.fee;
+}
+var fileOf = (id) => `cache/plan-${id}.json`;
+function save(store, chain, key, actions, summary) {
+  const saved = { id: key, chainId: chain.chainId, createdAt: Date.now(), actions, summary };
+  store.writeJson(fileOf(key), saved);
+  return saved;
+}
+function load(store, chain, id) {
+  if (!/^[0-9a-f]{12}$/.test(id)) return null;
+  const saved = store.readJson(fileOf(id));
+  if (!saved || !Array.isArray(saved.actions) || saved.chainId !== chain.chainId || Date.now() - saved.createdAt > PLAN_TTL_MS) return null;
+  return saved;
+}
+var keyOf = (chain, wallet, what) => crypto5.createHash("sha256").update(JSON.stringify([chain.chainId, wallet.toLowerCase(), what])).digest("hex").slice(0, 12);
+async function planOpen(store, chain, wallet, raw) {
+  const input2 = await normalizeOpen(chain, raw);
+  const key = keyOf(chain, wallet, ["open", input2]);
+  const kept = load(store, chain, key);
+  if (kept) return { planId: key, actions: kept.actions, summary: kept.summary };
+  const plan = await lpPlan(chain, wallet, input2);
+  const { actions, ...summary } = plan;
+  save(store, chain, key, actions, summary);
+  return { planId: key, actions, summary };
+}
+async function planClose(store, chain, wallet, raw) {
+  const tokenId2 = String(raw?.tokenId ?? raw?.id ?? raw?.position ?? raw ?? "").replace(/^#/, "").trim();
+  const key = keyOf(chain, wallet, ["close", tokenId2, raw?.slippageBps ?? null]);
+  const kept = load(store, chain, key);
+  if (kept) return { planId: key, actions: kept.actions, summary: kept.summary };
+  const plan = await exitPlan(chain, wallet, { tokenId: tokenId2, slippageBps: raw?.slippageBps });
+  const { actions, ...summary } = plan;
+  save(store, chain, key, actions, summary);
+  return { planId: key, actions, summary };
+}
+async function resolveActions(store, chain, wallet, input2) {
+  if (Array.isArray(input2?.actions) && input2.actions.length > 0) return { actions: input2.actions, planId: null };
+  if (input2?.planId) {
+    const saved = load(store, chain, String(input2.planId).trim());
+    if (!saved) throw new CliError("PLAN_EXPIRED", "That plan is more than ten minutes old or does not exist. Ask for it again.");
+    return { actions: saved.actions, planId: saved.id };
+  }
+  if (input2?.open) {
+    const p = await planOpen(store, chain, wallet, input2.open);
+    return { actions: p.actions, planId: p.planId };
+  }
+  if (input2?.close) {
+    const p = await planClose(store, chain, wallet, input2.close);
+    return { actions: p.actions, planId: p.planId };
+  }
+  throw new CliError("BAD_INPUT", `Say what to do: "open": ${EXAMPLE}, or "close": {"tokenId": "123"}, or a "planId" from sovereign_quote.`);
+}
+function forgetPlan(store, id) {
+  if (id && /^[0-9a-f]{12}$/.test(id)) store.writeJson(fileOf(id), null);
+}
+
 // src/actions.ts
-import crypto5 from "node:crypto";
+import crypto6 from "node:crypto";
 var MAX_ACTIONS = 12;
 var MAX_UINT1282 = (1n << 128n) - 1n;
 function units(text2, asset, what, allowZero = false) {
@@ -48485,7 +48643,7 @@ function describe3(chain, wallet, calls, opts) {
   }
   if (rawCount > 0 && rawCount !== calls.length) violations.push("A transfer or raw call cannot share a batch with other actions.");
   let kind = "other";
-  let ruleKey = `sovereign:${chain.chainId}:once:${crypto5.randomBytes(6).toString("hex")}`;
+  let ruleKey = `sovereign:${chain.chainId}:once:${crypto6.randomBytes(6).toString("hex")}`;
   if (rawCount > 0) {
     kind = "raw";
   } else if (npmActions > 0 && pools.size === 1 && !unknownPosition) {
@@ -48617,7 +48775,7 @@ async function execute2(ctx, input2) {
 // src/store.ts
 import fs from "node:fs";
 import path from "node:path";
-import crypto6 from "node:crypto";
+import crypto7 from "node:crypto";
 var Store = class {
   dir;
   constructor(dir) {
@@ -48646,7 +48804,7 @@ var Store = class {
   /** Atomic write: temp file in the same directory, then rename. */
   writeJson(rel, value) {
     const target = this.path(rel);
-    const tmp = `${target}.${crypto6.randomBytes(6).toString("hex")}.tmp`;
+    const tmp = `${target}.${crypto7.randomBytes(6).toString("hex")}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 384, flag: "wx" });
     fs.renameSync(tmp, target);
   }
@@ -48797,17 +48955,26 @@ async function run(argv, env) {
         else if (kind === "swap") data = await quoteSwap(chain, input2);
         else if (kind === "lp-plan" || kind === "exit-plan") {
           if (!wallet) throw new CliError("NO_WALLET", "There is no wallet yet. Create one in the Sovereign Finance pane.");
-          data = kind === "lp-plan" ? await lpPlan(chain, wallet.address, input2) : await exitPlan(chain, wallet.address, input2);
+          const planned = kind === "lp-plan" ? await planOpen(store, chain, wallet.address, input2) : await planClose(store, chain, wallet.address, input2);
+          data = { ...planned.summary, planId: planned.planId, actions: planned.actions, next: `To run this, call sovereign_execute with {"network": "${network}", "planId": "${planned.planId}"}. The plan is kept for ten minutes.` };
         } else throw new CliError("BAD_INPUT", 'kind must be "pools", "swap", "lp-plan" or "exit-plan".');
         data = { network, chainId: chain.chainId, kind, ...data };
         break;
       }
       case "describe":
-        data = describeBatch(ctx, { network, actions: input2?.actions });
+      case "execute": {
+        if (!network) throw new CliError("BAD_ARGS", `${command} needs a network.`);
+        const wallet = store.wallet(mode);
+        if (!wallet) throw new CliError("NO_WALLET", "There is no wallet yet. Create one in the Sovereign Finance pane.");
+        const batch = await resolveActions(store, chainFor(mode, network), wallet.address, input2);
+        if (command === "describe") data = { ...describeBatch(ctx, { network, actions: batch.actions }), planId: batch.planId };
+        else {
+          const result = await execute2(ctx, { network, actions: batch.actions });
+          if (result?.ok) forgetPlan(store, batch.planId);
+          data = result;
+        }
         break;
-      case "execute":
-        data = await execute2(ctx, { network, actions: input2?.actions });
-        break;
+      }
       default:
         throw new CliError("BAD_ARGS", `Unknown command "${command}".`);
     }

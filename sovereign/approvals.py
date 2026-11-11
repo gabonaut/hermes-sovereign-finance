@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import logging
 
-from . import cli, guard
+from . import cli, guard, tools
 
 log = logging.getLogger(__name__)
 
-# The hook must answer well inside Hermes's 30 second limit, or every tool is blocked for a minute.
-_DESCRIBE_TIMEOUT = 8
+# The hook must answer inside Hermes's 30 second limit, or every tool is blocked for a minute.
+# Describing a batch given as `open` or `close` plans it first, which reads the chain.
+_DESCRIBE_TIMEOUT = 22
 
 
 def _block(message: str) -> dict:
@@ -20,7 +21,7 @@ def _approve_execute(args) -> dict:
     network = args.get("network")
     if network not in ("bnb", "ethereum"):
         return _block('sovereign_execute needs network "bnb" or "ethereum".')
-    result = cli.run("describe", {"actions": args.get("actions")}, network=network, timeout=_DESCRIBE_TIMEOUT)
+    result = cli.run("describe", tools.batch_payload(args), network=network, timeout=_DESCRIBE_TIMEOUT)
     if not result.get("ok"):
         error = result.get("error") or {}
         return _block(f"Nothing was sent. {error.get('message', 'The batch could not be checked.')}")

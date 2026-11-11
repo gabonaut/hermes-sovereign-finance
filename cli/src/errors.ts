@@ -60,6 +60,26 @@ function ownError(e: any, depth = 0): CliError | null {
   return ownError(e.cause, depth + 1);
 }
 
+const REASONS: Record<string, string> = {
+  STF: "the wallet does not hold enough of a token this batch spends. Check the balances, and wrap or swap first if the plan had those steps",
+  "Too little received": "the swap would return less than the minimum set for it. Ask for a fresh plan",
+  "Price slippage check": "the pool price moved past the plan's limits. Ask for a fresh plan",
+  "Transaction too old": "the plan's deadline has passed. Ask for a fresh plan",
+};
+
+/** The text of a Solidity Error(string) revert found in an error message, or null. */
+function revertText(raw: string): string | null {
+  const m = /08c379a0([0-9a-fA-F]{128,})/.exec(raw);
+  if (!m) return null;
+  try {
+    const length = Number(BigInt("0x" + m[1].slice(64, 128)));
+    if (length <= 0 || length > 200) return null;
+    return Buffer.from(m[1].slice(128, 128 + length * 2), "hex").toString("utf8").replace(/[^\x20-\x7e]/g, "").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 /** What to say when the relay takes a batch and then drops it. `note` is the network's own caveat, when it has one. */
 export function relayDropped(note?: string | null): string {
   const base = "The relay dropped this batch without sending a transaction, so nothing was charged. The usual causes are a native cap or balance too low for the relay fee, or a batch that needs more gas than the relay allowed.";
@@ -71,6 +91,12 @@ export function decodeFailure(e: unknown): DecodedFailure {
   if (own) return { code: own.code, message: own.message, revert: null, relayCode: null, raw: own.message };
   const parts = [...new Set(collectText(e))];
   const raw = parts.join(" | ").slice(0, 4000);
+  // A contract's own revert text, when the batch would fail in a DEX or token contract.
+  const reason = revertText(raw);
+  if (reason) {
+    const why = REASONS[reason] ?? `a contract in the batch reverted with "${reason}"`;
+    return { code: "BATCH_WOULD_REVERT", message: `Nothing was sent: ${why}.`, revert: reason, relayCode: null, raw };
+  }
   let revert: string | null = null;
   for (const name of Object.values(ERROR_SIGNATURES)) {
     if (new RegExp(`\\b${name}\\b`).test(raw)) {

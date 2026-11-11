@@ -5,7 +5,8 @@ import { CliError, decodeFailure } from "./errors.ts";
 import { JobReporter, type JobKind } from "./job.ts";
 import { presetFor } from "./policy.ts";
 import { listPositions } from "./positions.ts";
-import { exitPlan, listPools, lpPlan, quoteSwap } from "./quote.ts";
+import { forgetPlan, planClose, planOpen, resolveActions } from "./plans.ts";
+import { listPools, quoteSwap } from "./quote.ts";
 import { describeBatch, execute, status } from "./session.ts";
 import { Store } from "./store.ts";
 import type { WebAuthnTransport } from "./webauthn.ts";
@@ -103,17 +104,26 @@ export async function run(argv: string[], env: Env): Promise<number> {
         else if (kind === "swap") data = await quoteSwap(chain, input);
         else if (kind === "lp-plan" || kind === "exit-plan") {
           if (!wallet) throw new CliError("NO_WALLET", "There is no wallet yet. Create one in the Sovereign Finance pane.");
-          data = kind === "lp-plan" ? await lpPlan(chain, wallet.address, input) : await exitPlan(chain, wallet.address, input);
+          const planned = kind === "lp-plan" ? await planOpen(store, chain, wallet.address, input) : await planClose(store, chain, wallet.address, input);
+          data = { ...(planned.summary as object), planId: planned.planId, actions: planned.actions, next: `To run this, call sovereign_execute with {"network": "${network}", "planId": "${planned.planId}"}. The plan is kept for ten minutes.` };
         } else throw new CliError("BAD_INPUT", 'kind must be "pools", "swap", "lp-plan" or "exit-plan".');
         data = { network, chainId: chain.chainId, kind, ...(data as object) };
         break;
       }
       case "describe":
-        data = describeBatch(ctx, { network, actions: input?.actions });
+      case "execute": {
+        if (!network) throw new CliError("BAD_ARGS", `${command} needs a network.`);
+        const wallet = store.wallet(mode);
+        if (!wallet) throw new CliError("NO_WALLET", "There is no wallet yet. Create one in the Sovereign Finance pane.");
+        const batch = await resolveActions(store, chainFor(mode, network), wallet.address, input);
+        if (command === "describe") data = { ...describeBatch(ctx, { network, actions: batch.actions }), planId: batch.planId };
+        else {
+          const result: any = await execute(ctx, { network, actions: batch.actions });
+          if (result?.ok) forgetPlan(store, batch.planId);
+          data = result;
+        }
         break;
-      case "execute":
-        data = await execute(ctx, { network, actions: input?.actions });
-        break;
+      }
       default:
         throw new CliError("BAD_ARGS", `Unknown command "${command}".`);
     }
