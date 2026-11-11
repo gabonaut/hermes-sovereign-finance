@@ -42,22 +42,27 @@ export async function relayServes(chain: Chain): Promise<boolean> {
 
 /** Gas the relay adds to every intent when it prices its fee, read from the relay itself. */
 export async function relayGasBuffer(chain: Chain): Promise<bigint> {
-  const fallback = 2_650_000n;
-  try {
-    const res = await fetch(chain.relayUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "wallet_getCapabilities", params: [] }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    const body: any = await res.json();
-    const gas = body?.result?.[`0x${chain.chainId.toString(16)}`]?.fees?.quoteConfig?.gas;
-    if (!gas) return fallback;
-    // Zero is a real answer: the mainnet relay adds no buffer.
-    return BigInt(Math.round(Number(gas.intentBuffer ?? 0))) + BigInt(Math.round(Number(gas.txBuffer ?? 0)));
-  } catch {
-    return fallback;
+  // When the relay does not answer, assume what its kind adds: the testnet relay pads its
+  // estimates heavily, the mainnet relay not at all.
+  const fallback = /testnet/.test(chain.relayUrl) ? 2_650_000n : 0n;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(chain.relayUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "wallet_getCapabilities", params: [] }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      const body: any = await res.json();
+      const gas = body?.result?.[`0x${chain.chainId.toString(16)}`]?.fees?.quoteConfig?.gas;
+      if (!gas) continue;
+      // Zero is a real answer: the mainnet relay adds no buffer.
+      return BigInt(Math.round(Number(gas.intentBuffer ?? 0))) + BigInt(Math.round(Number(gas.txBuffer ?? 0)));
+    } catch {
+      /* try once more, then fall back */
+    }
   }
+  return fallback;
 }
 
 /**
