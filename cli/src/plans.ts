@@ -10,7 +10,7 @@ import { CliError } from "./errors.ts";
 import { poolState } from "./positions.ts";
 import { exitPlan, lpPlan } from "./quote.ts";
 import type { Store } from "./store.ts";
-import { poolAddress, sortAssets } from "./v3.ts";
+import { poolAddress, sortAssets, tickSpacingFor } from "./v3.ts";
 
 const PLAN_TTL_MS = 10 * 60 * 1000;
 const EXAMPLE = '{"pair": "USDT/WBNB", "fee": 500, "budget": {"symbol": "BNB", "amount": "0.004"}, "rangePct": 3}';
@@ -76,8 +76,14 @@ export async function normalizeOpen(chain: Chain, raw: any): Promise<Record<stri
   const lower = raw.tickLower ?? raw.lowerTick;
   const upper = raw.tickUpper ?? raw.upperTick;
   if (lower !== undefined && upper !== undefined) {
-    out.tickLower = Number(lower);
-    out.tickUpper = Number(upper);
+    out.tickLower = Math.round(Number(lower));
+    out.tickUpper = Math.round(Number(upper));
+    // Ticks that miss the pool's spacing widen outward to the nearest ones that fit.
+    if (typeof out.fee === "number" && Number.isFinite(out.tickLower) && Number.isFinite(out.tickUpper)) {
+      const spacing = tickSpacingFor(chain, out.fee);
+      out.tickLower = Math.floor((out.tickLower as number) / spacing) * spacing;
+      out.tickUpper = Math.ceil((out.tickUpper as number) / spacing) * spacing;
+    }
   } else {
     const pct = raw.rangePct ?? raw.range ?? raw.rangePercent;
     if (pct !== undefined) out.rangePct = Number(String(pct).replace("%", ""));

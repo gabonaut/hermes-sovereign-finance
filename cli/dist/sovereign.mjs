@@ -48301,8 +48301,13 @@ async function normalizeOpen(chain, raw) {
   const lower = raw.tickLower ?? raw.lowerTick;
   const upper = raw.tickUpper ?? raw.upperTick;
   if (lower !== void 0 && upper !== void 0) {
-    out.tickLower = Number(lower);
-    out.tickUpper = Number(upper);
+    out.tickLower = Math.round(Number(lower));
+    out.tickUpper = Math.round(Number(upper));
+    if (typeof out.fee === "number" && Number.isFinite(out.tickLower) && Number.isFinite(out.tickUpper)) {
+      const spacing = tickSpacingFor(chain, out.fee);
+      out.tickLower = Math.floor(out.tickLower / spacing) * spacing;
+      out.tickUpper = Math.ceil(out.tickUpper / spacing) * spacing;
+    }
   } else {
     const pct = raw.rangePct ?? raw.range ?? raw.rangePercent;
     if (pct !== void 0) out.rangePct = Number(String(pct).replace("%", ""));
