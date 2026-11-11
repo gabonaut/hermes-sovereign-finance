@@ -140,7 +140,7 @@ function Steps({ state, draft, onDraft, onWithdraw }: StepsProps) {
   )
 }
 
-export function Pane({ ctx, store }: { ctx: PluginContext; store: Store }) {
+export function Pane({ ctx, store, page = false }: { ctx: PluginContext; store: Store; page?: boolean }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot)
   const { state, error, loading } = snapshot
   const rootRef = useRef<HTMLDivElement>(null)
@@ -208,7 +208,7 @@ export function Pane({ ctx, store }: { ctx: PluginContext; store: Store }) {
   return (
     <PaneContext.Provider value={env}>
       <style>{PANE_CSS}</style>
-      <div className="sf-root" data-mode={pendingMode ?? mode ?? undefined} ref={rootRef}>
+      <div className="sf-root" data-mode={pendingMode ?? mode ?? undefined} data-page={page || undefined} ref={rootRef}>
         <Header disabled={jobIsActive(job)} loading={loading} mode={mode} onSwitch={switchMode} pending={pendingMode} />
         {job && !error?.forbidden ? <JobBanner job={job} networks={state?.networks ?? []} openFailed={snapshot.passkeyOpenFailed} /> : null}
         <div className="sf-scroll">{body}</div>

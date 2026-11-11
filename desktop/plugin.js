@@ -2531,6 +2531,7 @@ var PANE_CSS = `
 /* Scrolling body */
 .sf-scroll{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:14px 8px 28px 16px}
 .sf-content{display:flex;flex-direction:column;gap:14px;transition:opacity .12s ease}
+.sf-root[data-page] .sf-content,.sf-root[data-page] .sf-header,.sf-root[data-page] .sf-job{width:min(100%,46rem);margin-left:auto;margin-right:auto}
 .sf-content[data-pending]{opacity:.45;pointer-events:none}
 .sf-loading{display:flex;flex-direction:column;gap:18px;padding-top:4px}
 .sf-loading-row{display:flex;align-items:center;gap:12px}
@@ -2985,7 +2986,7 @@ function Steps({ state, draft, onDraft, onWithdraw }) {
     )
   ] });
 }
-function Pane({ ctx, store }) {
+function Pane({ ctx, store, page = false }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { state, error, loading } = snapshot;
   const rootRef = useRef3(null);
@@ -3042,7 +3043,7 @@ function Pane({ ctx, store }) {
   }
   return /* @__PURE__ */ jsxs11(PaneContext.Provider, { value: env, children: [
     /* @__PURE__ */ jsx11("style", { children: PANE_CSS }),
-    /* @__PURE__ */ jsxs11("div", { className: "sf-root", "data-mode": pendingMode ?? mode ?? void 0, ref: rootRef, children: [
+    /* @__PURE__ */ jsxs11("div", { className: "sf-root", "data-mode": pendingMode ?? mode ?? void 0, "data-page": page || void 0, ref: rootRef, children: [
       /* @__PURE__ */ jsx11(Header, { disabled: jobIsActive(job2), loading, mode, onSwitch: switchMode, pending: pendingMode }),
       job2 && !error?.forbidden ? /* @__PURE__ */ jsx11(JobBanner, { job: job2, networks: state?.networks ?? [], openFailed: snapshot.passkeyOpenFailed }) : null,
       /* @__PURE__ */ jsx11("div", { className: "sf-scroll", children: body }),
@@ -3064,6 +3065,7 @@ import { jsx as jsx12 } from "react/jsx-runtime";
 var PANE_WIDTH = "26rem";
 var PANE_MIN_WIDTH = "20rem";
 var PANE_MAX_WIDTH = "36rem";
+var PAGE_PATH = "/sovereign-finance";
 var plugin = {
   id: PLUGIN_ID,
   name: "Sovereign Finance",
@@ -3084,6 +3086,19 @@ var plugin = {
         maxWidth: PANE_MAX_WIDTH
       },
       render: () => /* @__PURE__ */ jsx12(Pane, { ctx, store })
+    });
+    ctx.register({
+      id: "page",
+      area: "routes",
+      title: "Sovereign Finance",
+      data: { path: PAGE_PATH },
+      render: () => /* @__PURE__ */ jsx12(Pane, { ctx, page: true, store })
+    });
+    ctx.register({
+      id: "nav",
+      area: "sidebar.nav",
+      title: "Sovereign Finance",
+      data: { codicon: "credit-card", label: "Sovereign Finance", path: PAGE_PATH }
     });
   }
 };
