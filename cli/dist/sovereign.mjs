@@ -20567,6 +20567,10 @@ async function browserTransport(job, log) {
   return transport;
 }
 
+// src/main.ts
+import fs2 from "node:fs";
+import path2 from "node:path";
+
 // src/admin.ts
 import crypto4 from "node:crypto";
 
@@ -25534,10 +25538,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path2) {
-  if (!path2)
+function getElementAtPath(obj, path3) {
+  if (!path3)
     return obj;
-  return path2.reduce((acc, key) => acc?.[key], obj);
+  return path3.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -25877,11 +25881,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path2, issues) {
+function prefixIssues(path3, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path2);
+    iss.path.unshift(path3);
     return iss;
   });
 }
@@ -26343,16 +26347,16 @@ function flattenError(error62, mapper = (issue2) => issue2.message) {
 }
 function formatError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error63, path2 = []) => {
+  const processError = (error63, path3 = []) => {
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path2, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path3, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else {
-        const fullpath = [...path2, ...issue2.path];
+        const fullpath = [...path3, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -26391,17 +26395,17 @@ function formatError(error62, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error62, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error63, path2 = []) => {
+  const processError = (error63, path3 = []) => {
     var _a3;
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path2, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path3, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else {
-        const fullpath = [...path2, ...issue2.path];
+        const fullpath = [...path3, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -26440,8 +26444,8 @@ function treeifyError(error62, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path2 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path2) {
+  const path3 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path3) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -42941,8 +42945,8 @@ function toValidationError(e) {
   return new ValidationError(message);
 }
 function formatIssue(issue2, level = 0) {
-  const path2 = formatPath(issue2.path);
-  const prefix = `- ${path2 ? `${path2}: ` : ""}`;
+  const path3 = formatPath(issue2.path);
+  const prefix = `- ${path3 ? `${path3}: ` : ""}`;
   const indent = "  ".repeat(level + 1);
   let message = prefix;
   switch (issue2.code) {
@@ -43061,10 +43065,10 @@ function formatIssue(issue2, level = 0) {
   }
   return message;
 }
-function formatPath(path2) {
-  if (path2.length === 0)
+function formatPath(path3) {
+  if (path3.length === 0)
     return "";
-  return "at `" + path2.map((key, index2) => {
+  return "at `" + path3.map((key, index2) => {
     if (typeof key === "number")
       return `[${key}]`;
     if (typeof key === "symbol")
@@ -48973,8 +48977,18 @@ async function readInput(flags) {
 }
 var ADMIN = { create: "create", recover: "recover", activate: "activate", revoke: "revoke", withdraw: "withdraw" };
 async function run(argv, env) {
-  const log = (line) => process.stderr.write(`${line}
+  let logFile = null;
+  const log = (line) => {
+    process.stderr.write(`${line}
 `);
+    if (!logFile) return;
+    try {
+      if (fs2.existsSync(logFile) && fs2.statSync(logFile).size > 512e3) fs2.renameSync(logFile, `${logFile}.1`);
+      fs2.appendFileSync(logFile, `${(/* @__PURE__ */ new Date()).toISOString()} ${line.slice(0, 4e3)}
+`, { mode: 384 });
+    } catch {
+    }
+  };
   const emit = (value) => process.stdout.write(`${JSON.stringify(value, (_k, v) => typeof v === "bigint" ? v.toString() : v)}
 `);
   let job = null;
@@ -48982,6 +48996,11 @@ async function run(argv, env) {
     const { command, flags } = parseArgs(argv);
     if (!command) throw new CliError("BAD_ARGS", "Missing command.");
     const store = new Store(flags["data-dir"]);
+    if (flags["data-dir"]) {
+      fs2.mkdirSync(path2.join(flags["data-dir"], "logs"), { recursive: true, mode: 448 });
+      logFile = path2.join(flags["data-dir"], "logs", "cli.log");
+      log(`run ${command}${flags.network ? " " + flags.network : ""}`);
+    }
     const input2 = await readInput(flags);
     const mode = isMode(flags.mode) ? flags.mode : store.mode();
     const network = flags.network ?? input2?.network;
@@ -49063,7 +49082,7 @@ async function run(argv, env) {
     return 0;
   } catch (e) {
     const f = decodeFailure(e);
-    if (!(e instanceof CliError)) log(`error: ${f.raw}`);
+    log(`error ${f.code}: ${f.raw}`);
     job?.fail(f.code, f.message);
     emit({ ok: false, error: { code: f.code, message: f.message, revert: f.revert, relayCode: f.relayCode, ...e instanceof CliError ? e.extra : {} } });
     return 1;
