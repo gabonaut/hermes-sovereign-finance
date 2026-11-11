@@ -47186,21 +47186,23 @@ async function relayServes(chain) {
   return Boolean(body?.result && `0x${chain.chainId.toString(16)}` in body.result);
 }
 async function relayGasBuffer(chain) {
-  const fallback = 2650000n;
-  try {
-    const res = await fetch(chain.relayUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "wallet_getCapabilities", params: [] }),
-      signal: AbortSignal.timeout(1e4)
-    });
-    const body = await res.json();
-    const gas = body?.result?.[`0x${chain.chainId.toString(16)}`]?.fees?.quoteConfig?.gas;
-    if (!gas) return fallback;
-    return BigInt(Math.round(Number(gas.intentBuffer ?? 0))) + BigInt(Math.round(Number(gas.txBuffer ?? 0)));
-  } catch {
-    return fallback;
+  const fallback = /testnet/.test(chain.relayUrl) ? 2650000n : 0n;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(chain.relayUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "wallet_getCapabilities", params: [] }),
+        signal: AbortSignal.timeout(1e4)
+      });
+      const body = await res.json();
+      const gas = body?.result?.[`0x${chain.chainId.toString(16)}`]?.fees?.quoteConfig?.gas;
+      if (!gas) continue;
+      return BigInt(Math.round(Number(gas.intentBuffer ?? 0))) + BigInt(Math.round(Number(gas.txBuffer ?? 0)));
+    } catch {
+    }
   }
+  return fallback;
 }
 async function grantedPairs(chain, wallet, sessionAddress) {
   const res = await fetch(chain.relayUrl, {
