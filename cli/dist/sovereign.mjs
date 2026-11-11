@@ -20309,11 +20309,21 @@ function page(nonce) {
   #status { margin: 1.25rem 0 0; min-height: 1.5rem; opacity: .8; }
   #origin { margin-top: 2rem; font-size: .85rem; opacity: .6; }
 h1 svg{vertical-align:-4px;margin-right:8px}
+  #busy { display: flex; gap: 1rem; align-items: flex-start; margin: 0 0 1.5rem; padding: 1.1rem 1.2rem; border-radius: .6rem; border: 2px solid #3665e4; background: color-mix(in srgb, #3665e4 10%, transparent); }
+  #busy[hidden], #finished[hidden] { display: none; }
+  #spin { flex: none; width: 1.6rem; height: 1.6rem; margin-top: .15rem; border-radius: 50%; border: 3px solid color-mix(in srgb, #3665e4 25%, transparent); border-top-color: #3665e4; animation: turn .9s linear infinite; }
+  #busy strong { display: block; font-size: 1.2rem; line-height: 1.3; }
+  #busy span { display: block; margin-top: .3rem; opacity: .85; }
+  #finished { margin: 0 0 1.5rem; padding: 1.1rem 1.2rem; border-radius: .6rem; border: 2px solid #2e9e5b; background: color-mix(in srgb, #2e9e5b 10%, transparent); font-size: 1.2rem; font-weight: 600; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { #spin { animation-duration: 4s; } }
 </style>
 </head>
 <body>
 <main>
   <h1><svg aria-hidden="true" width="20" height="20" viewBox="-4.737 -26.701 449.183 449.183" fill="none"><path d="M298.4 361.864L156.979 220.442L298.4 79.0211L383.253 163.874C414.495 195.116 414.495 245.769 383.253 277.011L298.4 361.864Z" fill="#E2622E"/><path d="M141.421 361.45L56.5686 276.597C25.3266 245.355 25.3266 194.702 56.5686 163.46L141.421 78.6075L282.843 220.029L141.421 361.45Z" fill="#F2CB45"/><path d="M163.617 56.7248C194.858 25.4828 245.512 25.4828 276.754 56.7248L361.96 141.931L220.066 283.825L78.2908 142.051L163.617 56.7248Z" fill="#3665E4"/></svg>Sovereign Finance for Hermes</h1>
+  <div id="busy" hidden><div id="spin"></div><div><strong>Keep this tab open.</strong><span id="busytext">Hermes is working on it.</span></div></div>
+  <div id="finished" hidden></div>
   <p id="prompt">Waiting for a request from Hermes.</p>
   <div id="buttons" hidden>
     <button id="approve" type="button">Approve with passkey</button>
@@ -20344,8 +20354,20 @@ h1 svg{vertical-align:-4px;margin-right:8px}
     for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i);
     return a.buffer;
   }
+  var busyEl = document.getElementById("busy");
+  var busyText = document.getElementById("busytext");
+  var finishedEl = document.getElementById("finished");
+  var working = false;
   function say(text) { statusEl.textContent = text; }
-  function ended(text) { current = null; buttons.hidden = true; promptEl.textContent = text; say(""); }
+  // While Hermes works the page says so loudly, and the browser asks before the tab is closed.
+  function busy(text) {
+    working = Boolean(text);
+    busyEl.hidden = !working;
+    if (text) busyText.textContent = text;
+    if (working) promptEl.textContent = "";
+  }
+  window.addEventListener("beforeunload", function (e) { if (working) { e.preventDefault(); e.returnValue = ""; } });
+  function ended(text) { current = null; buttons.hidden = true; busy(""); promptEl.textContent = ""; finishedEl.textContent = text; finishedEl.hidden = false; document.title = "Done"; say(""); }
   function post(body) {
     return fetch(base + "/result", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   }
@@ -20358,6 +20380,7 @@ h1 svg{vertical-align:-4px;margin-right:8px}
         if (r.idle) return poll();
         current = r;
         seq = r.seq;
+        busy("");
         // One statement per line.
         promptEl.textContent = String(r.prompt).replace(/\\. (?=[A-Z])/g, ".\\n");
         approveBtn.textContent = r.kind === "ready" ? "Continue" : "Approve with passkey";
@@ -20397,8 +20420,8 @@ h1 svg{vertical-align:-4px;margin-right:8px}
       approveBtn.disabled = true;
       post({ seq: ready.seq, ok: true, result: {} }).then(function () {
         buttons.hidden = true;
-        promptEl.textContent = "Preparing the request.";
-        say("The passkey prompt comes next. Approve it promptly: the network quote behind it is short-lived.");
+        busy("Preparing the request. The passkey prompt comes next: approve it straight away, the network quote behind it is short-lived.");
+        say("");
         poll();
       });
       return;
@@ -20412,7 +20435,7 @@ h1 svg{vertical-align:-4px;margin-right:8px}
     var mine = current;
     ceremony(mine)
       .then(function (result) { return post({ seq: mine.seq, ok: true, result: result }); })
-      .then(function () { buttons.hidden = true; promptEl.textContent = "Approved."; say("Hermes is working on it. Keep this tab open until it says done."); poll(); })
+      .then(function () { buttons.hidden = true; busy("Approved. Hermes is sending it and waiting for the network. If another approval is needed, it appears here. This page says Done when you can close it."); say(""); poll(); })
       .catch(function (e) {
         approveBtn.disabled = false;
         var name = e && e.name;
@@ -48328,7 +48351,14 @@ async function exitPlan(chain, wallet, input2) {
   if (liquidity > 0n) {
     const state = await poolState(chain, poolAddress(chain, t0.address, t1.address, Number(fee)));
     const [a0, a1] = amountsForLiquidity(state.sqrtPriceX96, Number(tickLower), Number(tickUpper), liquidity);
-    actions.push({ type: "decrease", tokenId: id.toString(), token0: t0.symbol, token1: t1.symbol, liquidity: liquidity.toString(), amount0Min: text(less(a0, slippage), t0), amount1Min: text(less(a1, slippage), t1) });
+    const at = (up) => {
+      const factor = Math.sqrt(1 + (up ? 1 : -1) * Number(slippage) / 1e4);
+      return amountsForLiquidity(state.sqrtPriceX96 * BigInt(Math.round(factor * 1e9)) / 1000000000n, Number(tickLower), Number(tickUpper), liquidity);
+    };
+    const [up0, up1] = at(true);
+    const [down0, down1] = at(false);
+    const least = (...xs) => xs.reduce((x, y) => y < x ? y : x);
+    actions.push({ type: "decrease", tokenId: id.toString(), token0: t0.symbol, token1: t1.symbol, liquidity: liquidity.toString(), amount0Min: text(less(least(a0, up0, down0), 30n), t0), amount1Min: text(less(least(a1, up1, down1), 30n), t1) });
   }
   actions.push({ type: "collect", tokenId: id.toString() }, { type: "burn", tokenId: id.toString() });
   return { tokenId: id.toString(), pair: `${t0.symbol}/${t1.symbol}`, fee: Number(fee), actions, notes: ['Pass `actions` unchanged to sovereign_execute. To re-enter, ask for an lp-plan with budget "balances" afterwards.'] };
