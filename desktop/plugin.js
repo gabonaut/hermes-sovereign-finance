@@ -2856,6 +2856,9 @@ function Pane({ ctx, store }) {
 
 // src/plugin.tsx
 import { jsx as jsx11 } from "react/jsx-runtime";
+var PANE_WIDTH = "26rem";
+var PANE_MIN_WIDTH = "20rem";
+var PANE_MAX_WIDTH = "36rem";
 var plugin = {
   id: PLUGIN_ID,
   name: "Sovereign Finance",
@@ -2866,7 +2869,15 @@ var plugin = {
       id: PANE_ID,
       area: "panes",
       title: "Sovereign Finance",
-      data: { placement: "right" },
+      // A right-hand side panel with a bounded width, so it never takes the chat's place.
+      data: {
+        placement: "right",
+        collapsible: true,
+        dock: { pane: "workspace", pos: "right" },
+        width: PANE_WIDTH,
+        minWidth: PANE_MIN_WIDTH,
+        maxWidth: PANE_MAX_WIDTH
+      },
       render: () => /* @__PURE__ */ jsx11(Pane, { ctx, store })
     });
   }
