@@ -1,5 +1,6 @@
 # Draft entry for plugin-catalog/sovereign-finance.yaml in NousResearch/hermes-agent.
-# The catalog PR fills in `sha` with the full commit it pins.
+# The catalog PR fills in `sha` with the full commit it pins, and adds `image` and `screenshots`
+# as raw.githubusercontent.com links to assets/ at that same commit.
 name: sovereign-finance
 title: Sovereign Finance
 repo: https://github.com/gabonaut/hermes-sovereign-finance
