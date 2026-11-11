@@ -10,7 +10,7 @@ import type { BridgeRequest, WebAuthnTransport } from "./webauthn.ts";
 const REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 const POLL_HOLD_MS = 25_000;
 
-function page(nonce: string): string {
+export function page(nonce: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -80,7 +80,7 @@ h1 svg{vertical-align:-4px;margin-right:8px}
         current = r;
         seq = r.seq;
         // One statement per line.
-        promptEl.textContent = String(r.prompt).replace(/\. (?=[A-Z])/g, ".\n");
+        promptEl.textContent = String(r.prompt).replace(/\\. (?=[A-Z])/g, ".\\n");
         approveBtn.textContent = r.kind === "ready" ? "Continue" : "Approve with passkey";
         buttons.hidden = false;
         approveBtn.disabled = false;

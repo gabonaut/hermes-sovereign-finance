@@ -20347,8 +20347,7 @@ h1 svg{vertical-align:-4px;margin-right:8px}
         current = r;
         seq = r.seq;
         // One statement per line.
-        promptEl.textContent = String(r.prompt).replace(/. (?=[A-Z])/g, ".
-");
+        promptEl.textContent = String(r.prompt).replace(/\\. (?=[A-Z])/g, ".\\n");
         approveBtn.textContent = r.kind === "ready" ? "Continue" : "Approve with passkey";
         buttons.hidden = false;
         approveBtn.disabled = false;
