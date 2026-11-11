@@ -1,7 +1,7 @@
 name: sovereign-finance
 label: Sovereign Finance
 version: 0.1.0
-description: A Smart Agentic Wallet powered by Altana, for your Hermes agent on BNB Chain and Ethereum. Self-custodial. Your passkey is the admin, and the agent's session key is limited onchain.
+description: A Smart Agentic Wallet for your Hermes agent on BNB Chain and Ethereum. Self-custodial. Your passkey is the admin, and the agent's session key is limited onchain. Powered by Altana.
 author: gabonaut
 license: MIT
 homepage: https://github.com/gabonaut/hermes-sovereign-finance
