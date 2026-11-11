@@ -133,7 +133,7 @@ export function decodeFailure(e: unknown): DecodedFailure {
   let message = parts[0] ?? String(e);
   if (/key hash 0x[0-9a-f]+ is unknown/i.test(raw)) {
     code = "WALLET_KEY_UNKNOWN";
-    message = "The wallet does not accept this session key. It was revoked, or the session was never activated on this network.";
+    message = "The wallet does not accept this session key. It was revoked, or the session was never activated on this network. The user can activate new permissions in the Sovereign Finance pane in Hermes Desktop, with their passkey.";
   } else if (revert) {
     code = `WALLET_${revert.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()}`;
     message = EXPLAIN[revert] ?? `The wallet refused this batch (${revert}).`;
