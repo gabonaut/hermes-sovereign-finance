@@ -32,7 +32,7 @@ The pane has four steps. Nothing is sent to a chain until step 4.
 1. **Create wallet.** Your browser opens a page on localhost and creates a passkey. The wallet has one address on both networks.
 2. **Fund.** Send the native coin to that address from your own wallet: ETH on Ethereum, BNB on BNB Chain.
 3. **Set permissions.** Pick the tokens the agent may use, a daily cap for each, a daily cap for the native coin, and how many days the session lasts. The pane shows the resulting scope in plain English and what activation costs.
-4. **Activate.** One passkey approval per network. The first activation on a network also deploys the wallet there and registers two keys in the Altana Keystore, at $0.50 each. Later activations register one.
+4. **Activate.** One passkey approval per network, three on Sepolia. The first activation on a network also deploys the wallet there and registers two keys in the Altana Keystore, at $0.50 each. Later activations register one.
 
 After that the pane shows, per network, the session's scope and expiry, open positions, a link to the session key in the Keystore explorer, and Revoke. Withdraw sends funds from the wallet to an address you type. It needs your passkey too.
 
@@ -108,6 +108,8 @@ hermes plugins validate .
 ```
 
 `cli/dev/run.ts` runs the same commands with a software authenticator for testnet work. It refuses mainnet.
+
+The CLI reads its JSON input from stdin. When you run it by hand, pipe the input in, or add `< /dev/null` for a command that takes none.
 
 ## License
 
