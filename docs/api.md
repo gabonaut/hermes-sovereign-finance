@@ -94,7 +94,8 @@ Draft = {
   networks: { [NetworkKey]?: {
     scopeText: string[],
     cost: { keystoreFee: string, relayFeeEstimate: string, total: string, nativeSymbol: string, firstAction: boolean },
-    balance: string, sufficient: boolean
+    balance: string, sufficient: boolean,
+    approvals: number   // passkey approvals this network takes: 1, or more where activation is staged
   } }
 }
 ```

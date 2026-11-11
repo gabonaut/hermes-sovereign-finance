@@ -125,6 +125,8 @@ export interface DraftNetwork {
   }
   balance: string
   sufficient: boolean
+  /** Passkey approvals this network's activation takes. One, except where it is granted in stages. */
+  approvals: number
 }
 
 export interface Draft {

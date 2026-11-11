@@ -4346,7 +4346,7 @@ var init_rpc = __esm({
     init_request();
     unknownErrorCode = -1;
     RpcError = class extends BaseError2 {
-      constructor(cause, { code, docsPath: docsPath8, metaMessages, name, shortMessage }) {
+      constructor(cause, { code: code2, docsPath: docsPath8, metaMessages, name, shortMessage }) {
         super(shortMessage, {
           cause,
           docsPath: docsPath8,
@@ -4360,7 +4360,7 @@ var init_rpc = __esm({
           value: void 0
         });
         this.name = name || cause.name;
-        this.code = cause instanceof RpcRequestError ? cause.code : code ?? unknownErrorCode;
+        this.code = cause instanceof RpcRequestError ? cause.code : code2 ?? unknownErrorCode;
       }
     };
     ProviderRpcError = class extends RpcError {
@@ -4791,11 +4791,11 @@ var init_rpc = __esm({
 // node_modules/viem/_esm/utils/errors/getContractError.js
 function getContractError(err, { abi: abi2, address: address2, args, docsPath: docsPath8, functionName, sender }) {
   const error62 = err instanceof RawContractError ? err : err instanceof BaseError2 ? err.walk((err2) => typeof err2 === "object" && err2 !== null && "data" in err2) || err.walk() : {};
-  const { code, data, details, message, shortMessage } = error62;
+  const { code: code2, data, details, message, shortMessage } = error62;
   const cause = (() => {
     if (err instanceof AbiDecodingZeroDataError)
       return new ContractFunctionZeroDataError({ functionName, cause: err });
-    if ([EXECUTION_REVERTED_ERROR_CODE, InternalRpcError.code].includes(code) && (data || details || message || shortMessage) || code === InvalidInputRpcError.code && details === "execution reverted" && data) {
+    if ([EXECUTION_REVERTED_ERROR_CODE, InternalRpcError.code].includes(code2) && (data || details || message || shortMessage) || code2 === InvalidInputRpcError.code && details === "execution reverted" && data) {
       return new ContractFunctionRevertedError({
         abi: abi2,
         data: typeof data === "object" ? data.data : data,
@@ -8208,10 +8208,10 @@ function serializeStateMapping(stateMapping) {
   }, {});
 }
 function serializeAccountStateOverride(parameters) {
-  const { balance, nonce, state, stateDiff, code } = parameters;
+  const { balance, nonce, state, stateDiff, code: code2 } = parameters;
   const rpcAccountStateOverride = {};
-  if (code !== void 0)
-    rpcAccountStateOverride.code = code;
+  if (code2 !== void 0)
+    rpcAccountStateOverride.code = code2;
   if (balance !== void 0)
     rpcAccountStateOverride.balance = numberToHex(balance);
   if (nonce !== void 0)
@@ -12056,19 +12056,19 @@ var init_ccip2 = __esm({
 
 // node_modules/viem/_esm/actions/public/call.js
 async function call(client, args) {
-  const { account: account_ = client.account, authorizationList, batch = Boolean(client.batch?.multicall), blockHash, blockNumber, blockTag = client.experimental_blockTag ?? "latest", requireCanonical, accessList, blobs, blockOverrides, code, data: data_, factory, factoryData, gas, gasPrice, maxFeePerBlobGas, maxFeePerGas, maxPriorityFeePerGas, nonce, requestOptions, to, value, stateOverride, ...rest } = args;
+  const { account: account_ = client.account, authorizationList, batch = Boolean(client.batch?.multicall), blockHash, blockNumber, blockTag = client.experimental_blockTag ?? "latest", requireCanonical, accessList, blobs, blockOverrides, code: code2, data: data_, factory, factoryData, gas, gasPrice, maxFeePerBlobGas, maxFeePerGas, maxPriorityFeePerGas, nonce, requestOptions, to, value, stateOverride, ...rest } = args;
   const account = account_ ? parseAccount(account_) : void 0;
-  if (code && (factory || factoryData))
+  if (code2 && (factory || factoryData))
     throw new BaseError2("Cannot provide both `code` & `factory`/`factoryData` as parameters.");
-  if (code && to)
+  if (code2 && to)
     throw new BaseError2("Cannot provide both `code` & `to` as parameters.");
-  const deploylessCallViaBytecode = code && data_;
+  const deploylessCallViaBytecode = code2 && data_;
   const deploylessCallViaFactory = factory && factoryData && to && data_;
   const deploylessCall = deploylessCallViaBytecode || deploylessCallViaFactory;
   const data = (() => {
     if (deploylessCallViaBytecode)
       return toDeploylessCallViaBytecodeData({
-        code,
+        code: code2,
         data: data_
       });
     if (deploylessCallViaFactory)
@@ -12272,11 +12272,11 @@ function hasStateOverrideForAddress(rpcStateOverride, address2) {
   return Object.keys(rpcStateOverride).some((stateOverrideAddress) => isAddressEqual(stateOverrideAddress, address2));
 }
 function toDeploylessCallViaBytecodeData(parameters) {
-  const { code, data } = parameters;
+  const { code: code2, data } = parameters;
   return encodeDeployData({
     abi: parseAbi(["constructor(bytes, bytes)"]),
     bytecode: deploylessCallViaBytecodeBytecode,
-    args: [code, data]
+    args: [code2, data]
   });
 }
 function toDeploylessCallViaFactoryData(parameters) {
@@ -18059,17 +18059,17 @@ init_getAddress();
 init_size();
 init_slice();
 async function getDelegation(client, { address: address2, blockNumber, blockTag = "latest" }) {
-  const code = await getCode(client, {
+  const code2 = await getCode(client, {
     address: address2,
     ...blockNumber !== void 0 ? { blockNumber } : { blockTag }
   });
-  if (!code)
+  if (!code2)
     return void 0;
-  if (size(code) !== 23)
+  if (size(code2) !== 23)
     return void 0;
-  if (!code.startsWith("0xef0100"))
+  if (!code2.startsWith("0xef0100"))
     return void 0;
-  return getAddress(slice(code, 3, 23));
+  return getAddress(slice(code2, 3, 23));
 }
 
 // node_modules/viem/_esm/errors/eip712.js
@@ -18942,14 +18942,14 @@ async function verifyHash(client, parameters) {
 async function verifyErc8010(client, parameters) {
   const { address: address2, blockHash, blockNumber, blockTag, hash: hash5, multicallAddress, requireCanonical } = parameters;
   const { authorization: authorization_ox, data: initData, signature, to } = SignatureErc8010_exports.unwrap(parameters.signature);
-  const code = await getCode(client, {
+  const code2 = await getCode(client, {
     address: address2,
     blockHash,
     blockNumber,
     blockTag,
     requireCanonical
   });
-  if (code === concatHex(["0xef0100", authorization_ox.address]))
+  if (code2 === concatHex(["0xef0100", authorization_ox.address]))
     return await verifyErc1271(client, {
       ...parameters,
       signature
@@ -20147,9 +20147,9 @@ var ACCOUNT_ERRORS = parseAbi([
 var CliError = class extends Error {
   code;
   extra;
-  constructor(code, message, extra = {}) {
+  constructor(code2, message, extra = {}) {
     super(message);
-    this.code = code;
+    this.code = code2;
     this.extra = extra;
   }
 };
@@ -20232,24 +20232,24 @@ function decodeFailure(e) {
   }
   const relay = raw.match(/relay code (\d+)/i) ?? raw.match(/statusCode["=: ]+(\d{3})/);
   const relayCode = relay ? Number(relay[1]) : null;
-  let code = "FAILED";
+  let code2 = "FAILED";
   let message = parts[0] ?? String(e);
   if (/key hash 0x[0-9a-f]+ is unknown/i.test(raw)) {
-    code = "WALLET_KEY_UNKNOWN";
+    code2 = "WALLET_KEY_UNKNOWN";
     message = "The wallet does not accept this session key. It was revoked, or the session was never activated on this network.";
   } else if (revert) {
-    code = `WALLET_${revert.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()}`;
+    code2 = `WALLET_${revert.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()}`;
     message = EXPLAIN[revert] ?? `The wallet refused this batch (${revert}).`;
   } else if (relayCode === 300) {
-    code = "RELAY_REJECTED";
+    code2 = "RELAY_REJECTED";
     message = relayDropped();
   } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired/i.test(raw)) {
-    code = "QUOTE_EXPIRED";
+    code2 = "QUOTE_EXPIRED";
     message = "The approval took longer than the relay's fee quote lasts (30 seconds on mainnet). Nothing was sent. Start again and approve the passkey prompt promptly.";
   } else if (/insufficient|not enough/i.test(raw)) {
-    code = "INSUFFICIENT_FUNDS";
+    code2 = "INSUFFICIENT_FUNDS";
   }
-  return { code, message, revert, relayCode, raw };
+  return { code: code2, message, revert, relayCode, raw };
 }
 
 // src/bridge.ts
@@ -27785,12 +27785,12 @@ function isIso7064Mod97(iban3) {
   let remainder = 0;
   const len = iban3.length;
   for (let i = 4; i < len; i++) {
-    const code = iban3.charCodeAt(i);
-    remainder = (code >= 65 ? remainder * 100 + (code - 55) : remainder * 10 + (code - 48)) % 97;
+    const code2 = iban3.charCodeAt(i);
+    remainder = (code2 >= 65 ? remainder * 100 + (code2 - 55) : remainder * 10 + (code2 - 48)) % 97;
   }
   for (let i = 0; i < 4; i++) {
-    const code = iban3.charCodeAt(i);
-    remainder = (code >= 65 ? remainder * 100 + (code - 55) : remainder * 10 + (code - 48)) % 97;
+    const code2 = iban3.charCodeAt(i);
+    remainder = (code2 >= 65 ? remainder * 100 + (code2 - 55) : remainder * 10 + (code2 - 48)) % 97;
   }
   return remainder === 1;
 }
@@ -37736,12 +37736,12 @@ function compileFn(schema, options) {
   doc.write(outputAccessor === null ? `return true;` : `return ${outputAccessor};`);
   const constantNames = ["INVALID", ...ctx.constants.keys()];
   const constantValues = [INVALID, ...ctx.constants.values()];
-  const code = doc.content.join("\n");
+  const code2 = doc.content.join("\n");
   const fullCode = options?.debug ? constantNames.length > 0 ? `// Constants: ${constantNames.join(", ")}
-${code}` : code : "";
+${code2}` : code2 : "";
   const F = Function;
   const factoryCode = `return (input) => {
-${code}
+${code2}
 }`;
   let fn;
   try {
@@ -45511,21 +45511,21 @@ async function waitForCalls(client, callsId, timeoutMs = 24e4, pollIntervalMs = 
   while (Date.now() < deadline) {
     try {
       const status2 = await getCallsStatus(client, { id: callsId });
-      const code = status2?.status;
-      if (typeof code === "number")
-        lastCode = code;
-      if (typeof code === "number" && code >= 200 && code < 300 || code === "CONFIRMED") {
+      const code2 = status2?.status;
+      if (typeof code2 === "number")
+        lastCode = code2;
+      if (typeof code2 === "number" && code2 >= 200 && code2 < 300 || code2 === "CONFIRMED") {
         return {
           status: "CONFIRMED",
-          ...typeof code === "number" ? { statusCode: code } : {},
+          ...typeof code2 === "number" ? { statusCode: code2 } : {},
           transactionHash: status2?.receipts?.[0]?.transactionHash,
           ...status2?.receipts ? { receipts: status2.receipts } : {}
         };
       }
-      if (typeof code === "number" && code >= 300 && code < 700 || code === "FAILED") {
+      if (typeof code2 === "number" && code2 >= 300 && code2 < 700 || code2 === "FAILED") {
         return {
           status: "FAILED",
-          ...typeof code === "number" ? { statusCode: code } : {},
+          ...typeof code2 === "number" ? { statusCode: code2 } : {},
           ...status2?.receipts ? { receipts: status2.receipts } : {}
         };
       }
@@ -46798,7 +46798,8 @@ var networks_default = {
       shortName: "Sepolia",
       nativeSymbol: "SepoliaETH",
       sdkConfig: null,
-      relayNote: "On Sepolia, batches that write many new storage slots do not go through at the moment, and the full V3 LP permission set is one of them. BNB Chain testnet runs the whole flow.",
+      relayNote: "Sepolia limits how much new storage one transaction can write to the wallet, which is why activation takes several approvals there.",
+      storageBudget: 18,
       rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
       relayUrl: "https://testnet-relay.altana.network",
       explorerUrl: "https://sepolia.etherscan.io",
@@ -46998,7 +46999,8 @@ function parseChain(id, raw) {
     assets,
     preset: raw.preset,
     sdkConfig: raw.sdkConfig,
-    relayNote: typeof raw.relayNote === "string" ? raw.relayNote : null
+    relayNote: typeof raw.relayNote === "string" ? raw.relayNote : null,
+    storageBudget: Number.isInteger(raw.storageBudget) && raw.storageBudget > 0 ? raw.storageBudget : null
   };
 }
 var CHAINS = Object.fromEntries(
@@ -47065,6 +47067,46 @@ var addressUrl = (chain, address2) => `${chain.explorerUrl}/address/${address2}`
 var keystoreKeyUrl = (chain, keyId) => `${chain.keystoreExplorerUrl}/key/${keyId}`;
 var keystoreAccountUrl = (chain, address2) => `${chain.keystoreExplorerUrl}/account/${address2}`;
 var skillsConfig = networks_default.skills;
+
+// src/budget.ts
+var PER_TRANSACTION = 1;
+var AUTHORIZE_KEY = 5;
+var KEYSTORE_ENTRY = 10;
+var SPEND_LIMIT = 2;
+var setMember = (n) => n <= 3 ? 1 : n === 4 ? 6 : 2;
+function planStages(permissions, budget) {
+  const calls = permissions.calls ?? [];
+  const spend = permissions.spend ?? [];
+  if (!budget || calls.length === 0) return [{ calls: [...calls], spend: [...spend], register: true }];
+  const items = [
+    ...calls.map((value, i) => ({ kind: "call", value, cost: setMember(i + 2) })),
+    ...spend.map((value, i) => ({ kind: "spend", value, cost: SPEND_LIMIT + setMember(i + 1) })),
+    { kind: "register", cost: KEYSTORE_ENTRY }
+  ];
+  const stages = [[]];
+  let used = PER_TRANSACTION + AUTHORIZE_KEY + setMember(1);
+  for (const item of items) {
+    if (stages[stages.length - 1].length > 0 && used + item.cost > budget) {
+      stages.push([]);
+      used = PER_TRANSACTION;
+    }
+    stages[stages.length - 1].push(item);
+    used += item.cost;
+  }
+  return stages.map((stage) => {
+    const own2 = stage.flatMap((x) => x.kind === "call" ? [x.value] : []);
+    return {
+      calls: own2.length > 0 ? own2 : [calls[0]],
+      spend: stage.flatMap((x) => x.kind === "spend" ? [x.value] : []),
+      register: stage.some((x) => x.kind === "register")
+    };
+  });
+}
+function activationSlots(permissions) {
+  const calls = (permissions.calls ?? []).reduce((sum, _c, i) => sum + setMember(i + 2), 0);
+  const spends = (permissions.spend ?? []).reduce((sum, _s, i) => sum + SPEND_LIMIT + setMember(i + 1), 0);
+  return AUTHORIZE_KEY + setMember(1) + calls + spends + KEYSTORE_ENTRY;
+}
 
 // src/chainread.ts
 var nativeBalance = (chain, address2) => rpc(chain).getBalance({ address: address2 });
@@ -47357,12 +47399,15 @@ function ceil6(raw) {
   const unit = 10n ** 12n;
   return formatUnits((raw + unit - 1n) / unit * unit, 18);
 }
-async function costOf(chain, wallet, callEntries, spendEntries) {
+var BUDGET_SLOT_GAS = 85000n;
+async function costOf(chain, wallet, permissions) {
   const client = rpc(chain);
   const [fee, keys, gasPrice, balance, buffer2] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), client.getGasPrice(), nativeBalance(chain, wallet), relayGasBuffer(chain)]);
   const firstAction = keys.length === 0;
   const keystoreFee = fee * (firstAction ? 2n : 1n);
-  const relayFee = (estimateGrantGas(callEntries, spendEntries, firstAction) + buffer2) * gasPrice * 125n / 100n;
+  const stages = planStages(permissions, chain.storageBudget).length;
+  const gas = estimateGrantGas(permissions.calls?.length ?? 0, permissions.spend?.length ?? 0, firstAction) + BigInt(stages - 1) * 500000n + BigInt(stages) * buffer2 + (chain.storageBudget ? BigInt(activationSlots(permissions)) * BUDGET_SLOT_GAS : 0n);
+  const relayFee = gas * gasPrice * 125n / 100n;
   const total = keystoreFee + relayFee;
   return {
     cost: {
@@ -47372,6 +47417,8 @@ async function costOf(chain, wallet, callEntries, spendEntries) {
       nativeSymbol: chain.nativeSymbol,
       firstAction
     },
+    /** Passkey approvals this activation takes on this network. */
+    approvals: stages,
     balance: formatUnits(balance, 18),
     sufficient: balance >= total,
     keystoreFeeRaw: keystoreFee,
@@ -47390,7 +47437,7 @@ async function grantDraft(ctx, input2) {
   for (const key of keys) {
     const chain = chainFor(ctx.mode, key);
     const policy = compilePolicy(chain, input2.networks[key], expiry);
-    const { keystoreFeeRaw: _fee, balanceRaw: _balance, ...priced } = await costOf(chain, wallet.address, policy.permissions.calls.length, policy.permissions.spend.length);
+    const { keystoreFeeRaw: _fee, balanceRaw: _balance, ...priced } = await costOf(chain, wallet.address, policy.permissions);
     draft.networks[key] = { scopeText: policy.scopeText, ...priced };
     draft.inputs[key] = input2.networks[key];
   }
@@ -47400,6 +47447,15 @@ async function grantDraft(ctx, input2) {
 }
 function adminSigner(wallet, fns) {
   return signerFromPasskey(wallet.credential, { webAuthn: fns });
+}
+function approvalsText(mode, draft, keys) {
+  const counts = keys.map((k) => {
+    const chain = chainFor(mode, k);
+    return { name: chain.name, n: planStages(compilePolicy(chain, draft.inputs[k], draft.expiry).permissions, chain.storageBudget).length };
+  });
+  if (counts.every((c) => c.n === 1)) return "You will approve with your passkey once per network.";
+  const total = counts.reduce((sum, c) => sum + c.n, 0);
+  return `You will approve with your passkey ${total} times: ${counts.map((c) => `${c.n} for ${c.name}`).join(", ")}.`;
 }
 async function activate(ctx, input2) {
   const wallet = requireWallet(ctx);
@@ -47420,7 +47476,7 @@ async function activate(ctx, input2) {
         const policy = compilePolicy(chain, draft.inputs[key], draft.expiry);
         let record2 = ctx.store.session(chain.chainId);
         if (!(record2?.status === "active" && record2.draftId === draft.id)) {
-          const priced = await costOf(chain, wallet.address, policy.permissions.calls.length, policy.permissions.spend.length);
+          const priced = await costOf(chain, wallet.address, policy.permissions);
           if (priced.balanceRaw < priced.keystoreFeeRaw) {
             throw new CliError("INSUFFICIENT_FUNDS", `The wallet holds ${priced.balance} ${chain.nativeSymbol} on ${chain.name}. Activation needs about ${priced.cost.total}. Send more and activate again.`);
           }
@@ -47432,7 +47488,8 @@ async function activate(ctx, input2) {
           leg.charged = record2.charged;
           continue;
         }
-        if (record2?.status === "active") {
+        const halfGranted = record2?.status === "pending" && (record2.stagesDone ?? 0) > 0 && record2.draftId !== draft.id;
+        if (record2?.status === "active" || halfGranted) {
           ctx.job.step(`Revoking the current session on ${chain.name}`);
           say(`Revoke the agent's current session on ${chain.name} before the new one replaces it.`);
           const res = await client.revokeSession({ wallet: { address: wallet.address }, signer, session: record2.publicKey, chainId: chain.chainId });
@@ -47471,31 +47528,50 @@ async function activate(ctx, input2) {
           ctx.store.saveSession(chain.chainId, record2);
         }
         const sessionSigner = signerFromPrivateKey(secret);
+        const stages = planStages(policy.permissions, chain.storageBudget);
         const before = await nativeBalance(chain, wallet.address);
-        ctx.job.step(`Activating on ${chain.name}`);
-        say(`Activate the agent's session on ${chain.name}. ${policy.scopeText.slice(4, 6).join(" ")} ${policy.scopeText.at(-1)}`);
-        const session = await client.grantSession({
-          wallet: { address: wallet.address },
-          signer,
-          permissions: policy.permissions,
-          expiry: draft.expiry,
-          sessionSigner,
-          register: true,
-          chainId: chain.chainId
-        });
+        const hashes = [...record2.grantTxs ?? []];
+        for (let i = record2.stagesDone ?? 0; i < stages.length; i++) {
+          const stage = stages[i];
+          const many = stages.length > 1;
+          ctx.job.step(many ? `Activating on ${chain.name}, step ${i + 1} of ${stages.length}` : `Activating on ${chain.name}`);
+          say(`Activate the agent's session on ${chain.name}. ${policy.scopeText.slice(4, 6).join(" ")} ${policy.scopeText.at(-1)}${many ? ` Approval ${i + 1} of ${stages.length} on this network.` : ""}`);
+          try {
+            const granted = await client.grantSession({
+              wallet: { address: wallet.address },
+              signer,
+              permissions: { calls: stage.calls, spend: stage.spend },
+              expiry: draft.expiry,
+              sessionSigner,
+              register: stage.register,
+              chainId: chain.chainId
+            });
+            if (granted.transactionHash) hashes.push(granted.transactionHash);
+          } catch (e) {
+            if (!many) throw e;
+            const f = decodeFailure(e);
+            ctx.log(`activate ${chain.name} step ${i + 1} failed: ${f.raw}`);
+            const why = f.code === "RELAY_REJECTED" ? relayDropped(chain.relayNote) : f.message;
+            throw new CliError("STAGE_FAILED", `Step ${i + 1} of ${stages.length} on ${chain.name} did not go through. ${why} Activate again to continue from this step.`);
+          }
+          record2 = { ...record2, stagesDone: i + 1, grantTxs: hashes };
+          ctx.store.saveSession(chain.chainId, record2);
+        }
         const after = await nativeBalance(chain, wallet.address);
         const charged = before > after ? formatUnits(before - after, 18) : "0";
+        const session = { walletAddress: wallet.address, signer: sessionSigner, publicKey: sessionSigner.publicKey, permissions: policy.permissions, expiry: draft.expiry };
         const active = {
           ...record2,
           status: "active",
           serialized: serializeSession(session),
-          grantTx: session.transactionHash ?? null,
+          grantTx: hashes.at(-1) ?? null,
+          grantTxs: hashes,
           grantedAt: (/* @__PURE__ */ new Date()).toISOString(),
           charged
         };
         ctx.store.saveSession(chain.chainId, active);
         leg.status = "confirmed";
-        leg.txUrl = session.transactionHash ? txUrl(chain, session.transactionHash) : null;
+        leg.txUrl = active.grantTx ? txUrl(chain, active.grantTx) : null;
         leg.keystoreKeyUrl = keystoreKeyUrl(chain, active.keyId);
         leg.charged = charged;
       } catch (e) {
@@ -47505,7 +47581,7 @@ async function activate(ctx, input2) {
       }
     }
     return out;
-  }, `Hermes is about to activate the agent's session on ${keys.map((k) => chainFor(ctx.mode, k).name).join(" and ")}. You will approve with your passkey once per network. Continue when you are ready.`);
+  }, `Hermes is about to activate the agent's session on ${keys.map((k) => chainFor(ctx.mode, k).name).join(" and ")}. ${approvalsText(ctx.mode, draft, keys)} Continue when you are ready.`);
   return { legs };
 }
 async function revoke(ctx, input2) {
@@ -47602,8 +47678,8 @@ var JobReporter = class {
   done(result) {
     this.patch({ status: "done", step: "Done", result, passkeyUrl: null, passkeyPrompt: null, finishedAt: (/* @__PURE__ */ new Date()).toISOString() });
   }
-  fail(code, message) {
-    this.patch({ status: "error", step: "Failed", error: { code, message }, passkeyUrl: null, passkeyPrompt: null, finishedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  fail(code2, message) {
+    this.patch({ status: "error", step: "Failed", error: { code: code2, message }, passkeyUrl: null, passkeyPrompt: null, finishedAt: (/* @__PURE__ */ new Date()).toISOString() });
   }
 };
 
@@ -48713,4 +48789,5 @@ async function run(argv, env) {
 }
 
 // src/entry.ts
-process.exitCode = await run(process.argv.slice(2), { openTransport: (job, log) => browserTransport(job, log) });
+var code = await run(process.argv.slice(2), { openTransport: (job, log) => browserTransport(job, log) });
+process.stdout.write("", () => process.exit(code));
