@@ -91,6 +91,17 @@ export function decodeFailure(e: unknown): DecodedFailure {
   if (own) return { code: own.code, message: own.message, revert: null, relayCode: null, raw: own.message };
   const parts = [...new Set(collectText(e))];
   const raw = parts.join(" | ").slice(0, 4000);
+  // The relay says in its quote when the wallet cannot cover the batch plus its fee.
+  const short = /"feeTokenDeficit":"(0x[0-9a-fA-F]+)"/.exec(raw);
+  if (short && BigInt(short[1]) > 0n) {
+    const need = /"required":"(0x[0-9a-fA-F]+)"/.exec(raw);
+    const eth = (hex: string) => (Number(BigInt(hex) / 10n ** 9n) / 1e9).toFixed(6);
+    return {
+      code: "INSUFFICIENT_FUNDS",
+      message: `Nothing was sent: the wallet is short by about ${eth(short[1])} of the native coin for this amount plus the network fee${need ? ` (it needs ${eth(need[1])} in total)` : ""}. The fee moved since the amount was worked out. Send a little less, or use Max again.`,
+      revert: null, relayCode: null, raw,
+    };
+  }
   // A contract's own revert text, when the batch would fail in a DEX or token contract.
   const reason = revertText(raw);
   if (reason) {
@@ -142,7 +153,7 @@ export function decodeFailure(e: unknown): DecodedFailure {
     message = relayDropped();
   } else if (/quote.{0,40}expired|expired.{0,40}quote|intent.{0,20}expired|Invalid parameters were provided to the RPC method/i.test(raw)) {
     code = "QUOTE_EXPIRED";
-    message = "The relay did not accept the signed request, and nothing was sent. This happens when the approval takes longer than the relay's fee quote lasts, which is 30 seconds on mainnet. Start again and approve the passkey prompt straight away.";
+    message = "The relay did not accept the signed request, and nothing was sent. The usual cause on mainnet is an approval that took longer than the 30 seconds the fee quote lasts. Start again and approve the passkey prompt straight away.";
   } else if (/insufficient|not enough/i.test(raw)) {
     code = "INSUFFICIENT_FUNDS";
   }

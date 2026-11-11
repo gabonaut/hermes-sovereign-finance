@@ -132,7 +132,9 @@ async function withdrawReserve(chain: Chain, wallet: Address): Promise<bigint> {
   const [fee, keys, gasPrice, buffer] = await Promise.all([registrationFee(chain), keystoreKeys(chain, wallet), rpc(chain).getGasPrice(), relayGasBuffer(chain)]);
   const first = keys.length === 0;
   const gas = 600_000n + (first ? 550_000n : 0n) + buffer + (chain.storageBudget ? (first ? 16n : 2n) * BUDGET_SLOT_GAS : 0n);
-  const price = gasPrice * 2n > 100_000_000n ? gasPrice * 2n : 100_000_000n;
+  // The relay prices its fee at about twice the fee it expects for the next blocks, which can sit
+  // above the network's current quote, so the reserve uses three times that quote.
+  const price = gasPrice * 3n > 100_000_000n ? gasPrice * 3n : 100_000_000n;
   return gas * price + (first ? fee : 0n);
 }
 

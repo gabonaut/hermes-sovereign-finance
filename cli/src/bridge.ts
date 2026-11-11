@@ -41,7 +41,7 @@ h1 svg{vertical-align:-4px;margin-right:8px}
     <button id="cancel" type="button">Cancel</button>
   </div>
   <p id="status" role="status"></p>
-  <p id="origin">This page is served by the Sovereign Finance plugin on your own computer. Your passkey signs here and never leaves your device.</p>
+  <p id="origin">This page is served by the Sovereign Finance plugin on your own computer.<br>Your passkey signs here and never leaves your device.</p>
 </main>
 <script nonce="${nonce}">
 (function () {
