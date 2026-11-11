@@ -1,4 +1,6 @@
 // Command dispatch. Every command prints one JSON envelope on stdout; progress goes to stderr.
+import fs from "node:fs";
+import path from "node:path";
 import { activate, createWallet, grantDraft, recoverWallet, revoke, withdraw, type AdminCtx } from "./admin.ts";
 import { chainFor, chainsFor, isMode, isNetworkKey, type Mode } from "./config.ts";
 import { CliError, decodeFailure } from "./errors.ts";
@@ -41,13 +43,30 @@ async function readInput(flags: Record<string, string>): Promise<any> {
 const ADMIN: Record<string, JobKind> = { create: "create", recover: "recover", activate: "activate", revoke: "revoke", withdraw: "withdraw" };
 
 export async function run(argv: string[], env: Env): Promise<number> {
-  const log = (line: string) => process.stderr.write(`${line}\n`);
+  // Progress goes to stderr and, once the data directory is known, to a small log file there, so a
+  // failure inside a background job can be read afterwards. No key is ever written to it.
+  let logFile: string | null = null;
+  const log = (line: string) => {
+    process.stderr.write(`${line}\n`);
+    if (!logFile) return;
+    try {
+      if (fs.existsSync(logFile) && fs.statSync(logFile).size > 512_000) fs.renameSync(logFile, `${logFile}.1`);
+      fs.appendFileSync(logFile, `${new Date().toISOString()} ${line.slice(0, 4000)}\n`, { mode: 0o600 });
+    } catch {
+      /* logging never fails a command */
+    }
+  };
   const emit = (value: unknown) => process.stdout.write(`${JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v))}\n`);
   let job: JobReporter | null = null;
   try {
     const { command, flags } = parseArgs(argv);
     if (!command) throw new CliError("BAD_ARGS", "Missing command.");
     const store = new Store(flags["data-dir"]);
+    if (flags["data-dir"]) {
+      fs.mkdirSync(path.join(flags["data-dir"], "logs"), { recursive: true, mode: 0o700 });
+      logFile = path.join(flags["data-dir"], "logs", "cli.log");
+      log(`run ${command}${flags.network ? " " + flags.network : ""}`);
+    }
     const input = await readInput(flags);
     const mode: Mode = isMode(flags.mode) ? flags.mode : store.mode();
     const network = flags.network ?? input?.network;
@@ -131,7 +150,7 @@ export async function run(argv: string[], env: Env): Promise<number> {
     return 0;
   } catch (e) {
     const f = decodeFailure(e);
-    if (!(e instanceof CliError)) log(`error: ${f.raw}`);
+    log(`error ${f.code}: ${f.raw}`);
     job?.fail(f.code, f.message);
     emit({ ok: false, error: { code: f.code, message: f.message, revert: f.revert, relayCode: f.relayCode, ...(e instanceof CliError ? e.extra : {}) } });
     return 1;
