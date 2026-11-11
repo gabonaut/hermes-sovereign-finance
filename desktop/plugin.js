@@ -4,8 +4,8 @@
 // string-to-bytes helper swapped for TextEncoder (see build.mjs).
 
 // src/app.tsx
-import { Button as Button6, ErrorState, Skeleton as Skeleton3 } from "@hermes/plugin-sdk";
-import { useCallback as useCallback2, useEffect as useEffect3, useMemo as useMemo2, useRef as useRef3, useState as useState6, useSyncExternalStore } from "react";
+import { Button as Button7, ErrorState, Skeleton as Skeleton3 } from "@hermes/plugin-sdk";
+import { useCallback as useCallback2, useEffect as useEffect3, useMemo as useMemo2, useRef as useRef3, useState as useState7, useSyncExternalStore } from "react";
 
 // src/format.ts
 var ELLIPSIS = "\u2026";
@@ -103,8 +103,8 @@ function isWebUrl(value) {
 function isLoopbackUrl(value) {
   const url = parseUrl(value);
   if (!url || url.protocol !== "http:" && url.protocol !== "https:") return false;
-  const host2 = url.hostname.toLowerCase();
-  return host2 === "localhost" || host2.endsWith(".localhost") || host2 === "127.0.0.1" || host2 === "[::1]";
+  const host3 = url.hostname.toLowerCase();
+  return host3 === "localhost" || host3.endsWith(".localhost") || host3 === "127.0.0.1" || host3 === "[::1]";
 }
 var isAddress = (value) => /^0x[0-9a-fA-F]{40}$/.test(value.trim());
 
@@ -966,9 +966,165 @@ function JobBanner({ job: job2, networks, openFailed }) {
 }
 
 // src/live.tsx
-import { Badge as Badge3, Button as Button2, ConfirmDialog as ConfirmDialog2, StatusDot } from "@hermes/plugin-sdk";
-import { useState as useState3 } from "react";
+import { Badge as Badge3, Button as Button3, ConfirmDialog as ConfirmDialog2, StatusDot } from "@hermes/plugin-sdk";
+import { useState as useState4 } from "react";
+
+// src/plays-view.tsx
+import { Button as Button2, host as host2, Input } from "@hermes/plugin-sdk";
+import { useId, useState as useState3 } from "react";
+
+// src/plays.ts
+var PLAYS = [
+  {
+    id: "find",
+    title: "Find a pool",
+    blurb: "Ranks the most traded pools by fee income and suggests one.",
+    actions: [
+      {
+        label: "Ask",
+        request: (c) => `List the most traded V3 pools on ${c.network} with their fee APR, and tell me which one you would pick for a small position and why.`
+      }
+    ]
+  },
+  {
+    id: "open",
+    title: "Open a position",
+    blurb: "Wraps, swaps half and provides liquidity around the current price, in one batch.",
+    sized: true,
+    actions: [
+      {
+        label: "Ask",
+        request: (c) => `Open a liquidity position in the ${c.pair} pool on ${c.network} with ${c.amount} ${c.native}, ${c.rangePct}% either side of the price.`
+      }
+    ]
+  },
+  {
+    id: "keep",
+    title: "Keep it in range",
+    blurb: "Closes a position the price has left and reopens it around the current price.",
+    actions: [
+      {
+        label: "Now",
+        request: (c) => `Check my positions on ${c.network}. Close any that is out of range and reopen it around the current price.`
+      },
+      {
+        label: "Every 30 min",
+        request: (c) => `Set up a scheduled job that runs every 30 minutes with the sovereign-finance:v3-range skill: check my positions on ${c.network}, close any that is out of range and reopen it around the current price, otherwise answer with one line of status.`
+      }
+    ]
+  },
+  {
+    id: "compound",
+    title: "Compound fees",
+    blurb: "Collects the fees a position has earned and adds them back to it.",
+    actions: [
+      { label: "Ask", request: (c) => `Collect the fees my positions on ${c.network} have earned and add them back to the same positions.` }
+    ]
+  },
+  {
+    id: "exit",
+    title: "Cash out",
+    blurb: "Closes every position and swaps everything back to the native coin.",
+    actions: [
+      { label: "Ask", request: (c) => `Close all my positions on ${c.network} and swap everything back to ${c.native}.` }
+    ]
+  }
+];
+var STABLES = ["USDT", "USDC", "BUSD"];
+function defaultsFor(network2) {
+  const symbols = (network2.balances?.tokens ?? []).map((t) => t.symbol);
+  const wrapped = symbols.find((s) => s === "WBNB" || s === "WETH") ?? (network2.key === "bnb" ? "WBNB" : "WETH");
+  const stable = STABLES.find((s) => symbols.includes(s)) ?? (network2.key === "bnb" ? "USDT" : "USDC");
+  return { pair: `${stable}/${wrapped}`, amount: network2.key === "bnb" ? "0.002" : "0.001", rangePct: "3" };
+}
+
+// src/plays-view.tsx
 import { jsx as jsx5, jsxs as jsxs5 } from "react/jsx-runtime";
+async function hand(text2) {
+  const composer = host2.composer;
+  try {
+    if (composer && typeof composer.setDraft === "function") {
+      for (const target of [null, "new"]) {
+        if (await composer.setDraft(target, text2)) {
+          composer.focus?.(target);
+          return "chat";
+        }
+      }
+    }
+  } catch {
+  }
+  try {
+    await navigator.clipboard.writeText(text2);
+    return "copied";
+  } catch {
+    return "failed";
+  }
+}
+var NOTE = {
+  chat: "Written into the chat box. Press Enter to send it.",
+  copied: "Copied. Paste it into a chat and send it.",
+  failed: "Open a chat first, then press the button again."
+};
+function Plays({ network: network2 }) {
+  const uid = useId();
+  const defaults = defaultsFor(network2);
+  const [amount, setAmount] = useState3(defaults.amount);
+  const [rangePct, setRangePct] = useState3(defaults.rangePct);
+  const [note, setNote] = useState3(null);
+  const context = {
+    network: network2.key,
+    networkName: network2.name,
+    native: network2.nativeSymbol,
+    pair: defaults.pair,
+    amount: amount.trim() || defaults.amount,
+    rangePct: rangePct.trim() || defaults.rangePct
+  };
+  const run = async (play, request) => {
+    setNote({ id: play.id, kind: await hand(request(context)) });
+  };
+  return /* @__PURE__ */ jsxs5("section", { className: "sf-plays", children: [
+    /* @__PURE__ */ jsxs5("div", { className: "sf-plays-head", children: [
+      /* @__PURE__ */ jsx5("span", { className: "sf-strong", children: "Ask the agent" }),
+      /* @__PURE__ */ jsx5("span", { className: "sf-hint", children: "A button writes the request into the chat box. You send it." })
+    ] }),
+    /* @__PURE__ */ jsx5("ul", { className: "sf-play-list", children: PLAYS.map((play) => /* @__PURE__ */ jsxs5("li", { className: "sf-play", children: [
+      /* @__PURE__ */ jsxs5("div", { className: "sf-play-text", children: [
+        /* @__PURE__ */ jsx5("span", { className: "sf-play-title", children: play.title }),
+        /* @__PURE__ */ jsx5("span", { className: "sf-play-blurb", children: play.blurb }),
+        play.sized ? /* @__PURE__ */ jsxs5("span", { className: "sf-play-fields", children: [
+          /* @__PURE__ */ jsx5("label", { className: "sf-play-field", htmlFor: `${uid}-amount`, children: /* @__PURE__ */ jsx5(
+            Input,
+            {
+              className: "sf-num-input",
+              id: `${uid}-amount`,
+              inputMode: "decimal",
+              onChange: (e) => setAmount(e.target.value),
+              suffix: network2.nativeSymbol,
+              value: amount
+            }
+          ) }),
+          /* @__PURE__ */ jsx5("label", { className: "sf-play-field", htmlFor: `${uid}-range`, children: /* @__PURE__ */ jsx5(
+            Input,
+            {
+              className: "sf-num-input",
+              id: `${uid}-range`,
+              inputMode: "decimal",
+              onChange: (e) => setRangePct(e.target.value),
+              suffix: "% range",
+              value: rangePct
+            }
+          ) }),
+          /* @__PURE__ */ jsx5("span", { className: "sf-hint", children: defaults.pair })
+        ] }) : null,
+        note?.id === play.id ? /* @__PURE__ */ jsx5("span", { className: "sf-play-note", children: NOTE[note.kind] }) : null
+      ] }),
+      /* @__PURE__ */ jsx5("div", { className: "sf-play-actions", children: play.actions.map((action) => /* @__PURE__ */ jsx5(Button2, { onClick: () => void run(play, action.request), size: "sm", type: "button", variant: "outline", children: action.label }, action.label)) })
+    ] }, play.id)) })
+  ] });
+}
+
+// src/live.tsx
+import { jsx as jsx6, jsxs as jsxs6 } from "react/jsx-runtime";
 var STATUS = {
   active: { label: "Active", tone: "good" },
   expired: { label: "Expired", tone: "warn" },
@@ -982,7 +1138,7 @@ function RangeBar({ position: position2, at }) {
   const inside = at >= 0 && at <= 1;
   const left = inside ? 14 + at * 72 : at < 0 ? 5 : 95;
   const where = inside ? "inside" : at < 0 ? "below" : "above";
-  return /* @__PURE__ */ jsxs5(
+  return /* @__PURE__ */ jsxs6(
     "div",
     {
       "aria-label": `Current price ${position2.priceCurrent} is ${where} the range ${position2.priceLower} to ${position2.priceUpper} ${position2.priceUnit}`,
@@ -990,19 +1146,19 @@ function RangeBar({ position: position2, at }) {
       "data-in": inside || void 0,
       role: "img",
       children: [
-        /* @__PURE__ */ jsx5("span", { className: "sf-range-band" }),
-        /* @__PURE__ */ jsx5("span", { className: "sf-range-mark", style: { left: `${left}%` } })
+        /* @__PURE__ */ jsx6("span", { className: "sf-range-band" }),
+        /* @__PURE__ */ jsx6("span", { className: "sf-range-mark", style: { left: `${left}%` } })
       ]
     }
   );
 }
 function Ledger({ rows }) {
   const columns = Math.max(1, ...rows.map((row) => row.items.length));
-  return /* @__PURE__ */ jsx5("dl", { className: "sf-ledger", style: { gridTemplateColumns: `minmax(0,1fr) repeat(${columns},minmax(0,auto))` }, children: rows.map((row) => /* @__PURE__ */ jsxs5("div", { children: [
-    /* @__PURE__ */ jsx5("dt", { children: row.label }),
+  return /* @__PURE__ */ jsx6("dl", { className: "sf-ledger", style: { gridTemplateColumns: `minmax(0,1fr) repeat(${columns},minmax(0,auto))` }, children: rows.map((row) => /* @__PURE__ */ jsxs6("div", { children: [
+    /* @__PURE__ */ jsx6("dt", { children: row.label }),
     Array.from({ length: columns }, (_, i) => {
       const item = row.items[i];
-      return /* @__PURE__ */ jsx5("dd", { children: item ? /* @__PURE__ */ jsx5(Num, { symbol: item.symbol, value: item.amount }) : null }, i);
+      return /* @__PURE__ */ jsx6("dd", { children: item ? /* @__PURE__ */ jsx6(Num, { symbol: item.symbol, value: item.amount }) : null }, i);
     })
   ] }, row.label)) });
 }
@@ -1010,23 +1166,23 @@ function PositionBlock({ position: position2, dex }) {
   const minted = parseTime(position2.mintedAt);
   const at = rangePosition(position2.priceLower, position2.priceUpper, position2.priceCurrent);
   const order = at !== null && at < 0 ? ["current", "lower", "upper"] : at !== null && at > 1 ? ["lower", "upper", "current"] : ["lower", "current", "upper"];
-  return /* @__PURE__ */ jsxs5("li", { className: "sf-pos", children: [
-    /* @__PURE__ */ jsxs5("div", { className: "sf-pos-head", children: [
-      /* @__PURE__ */ jsx5("span", { className: "sf-pos-pair", children: position2.pair }),
-      position2.feePct ? /* @__PURE__ */ jsxs5("span", { className: "sf-pos-fee", children: [
+  return /* @__PURE__ */ jsxs6("li", { className: "sf-pos", children: [
+    /* @__PURE__ */ jsxs6("div", { className: "sf-pos-head", children: [
+      /* @__PURE__ */ jsx6("span", { className: "sf-pos-pair", children: position2.pair }),
+      position2.feePct ? /* @__PURE__ */ jsxs6("span", { className: "sf-pos-fee", children: [
         position2.feePct,
         "%"
       ] }) : null,
-      /* @__PURE__ */ jsx5(Badge3, { variant: position2.inRange ? "success" : "warn", children: position2.inRange ? "In range" : "Out of range" })
+      /* @__PURE__ */ jsx6(Badge3, { variant: position2.inRange ? "success" : "warn", children: position2.inRange ? "In range" : "Out of range" })
     ] }),
-    /* @__PURE__ */ jsx5(RangeBar, { at, position: position2 }),
-    /* @__PURE__ */ jsx5("div", { className: "sf-pos-prices", children: order.map(
-      (cell) => cell === "current" ? /* @__PURE__ */ jsxs5("span", { className: "sf-pos-current", children: [
-        /* @__PURE__ */ jsx5("span", { className: "sf-num", "data-strong": "true", children: position2.priceCurrent }),
-        /* @__PURE__ */ jsx5("span", { className: "sf-dim", children: position2.priceUnit })
-      ] }, cell) : /* @__PURE__ */ jsx5("span", { className: "sf-num", children: cell === "lower" ? position2.priceLower : position2.priceUpper }, cell)
+    /* @__PURE__ */ jsx6(RangeBar, { at, position: position2 }),
+    /* @__PURE__ */ jsx6("div", { className: "sf-pos-prices", children: order.map(
+      (cell) => cell === "current" ? /* @__PURE__ */ jsxs6("span", { className: "sf-pos-current", children: [
+        /* @__PURE__ */ jsx6("span", { className: "sf-num", "data-strong": "true", children: position2.priceCurrent }),
+        /* @__PURE__ */ jsx6("span", { className: "sf-dim", children: position2.priceUnit })
+      ] }, cell) : /* @__PURE__ */ jsx6("span", { className: "sf-num", children: cell === "lower" ? position2.priceLower : position2.priceUpper }, cell)
     ) }),
-    /* @__PURE__ */ jsx5(
+    /* @__PURE__ */ jsx6(
       Ledger,
       {
         rows: [
@@ -1035,13 +1191,13 @@ function PositionBlock({ position: position2, dex }) {
         ]
       }
     ),
-    /* @__PURE__ */ jsxs5("div", { className: "sf-pos-foot sf-dim", children: [
-      dex ? /* @__PURE__ */ jsx5("span", { children: dex }) : null,
-      position2.tokenId ? /* @__PURE__ */ jsxs5("span", { className: "sf-mono", children: [
+    /* @__PURE__ */ jsxs6("div", { className: "sf-pos-foot sf-dim", children: [
+      dex ? /* @__PURE__ */ jsx6("span", { children: dex }) : null,
+      position2.tokenId ? /* @__PURE__ */ jsxs6("span", { className: "sf-mono", children: [
         "#",
         position2.tokenId
       ] }) : null,
-      minted !== null ? /* @__PURE__ */ jsxs5("span", { children: [
+      minted !== null ? /* @__PURE__ */ jsxs6("span", { children: [
         "since ",
         formatDate(minted)
       ] }) : null
@@ -1050,52 +1206,53 @@ function PositionBlock({ position: position2, dex }) {
 }
 function SessionCard({ network: network2, session: session2 }) {
   const { store, now, locked } = usePane();
-  const [confirming, setConfirming] = useState3(false);
+  const [confirming, setConfirming] = useState4(false);
   const status = statusOf(session2);
   const expiry = session2.expiry > 0 ? session2.expiry * 1e3 : null;
   const asOf = parseTime(network2.asOf);
   const canRevoke = session2.status !== "revoked" && session2.status !== "expired";
-  return /* @__PURE__ */ jsxs5("li", { className: "sf-card", "data-status": session2.status, children: [
-    /* @__PURE__ */ jsxs5("div", { className: "sf-card-head", children: [
-      /* @__PURE__ */ jsx5("span", { className: "sf-card-net", children: network2.name }),
-      /* @__PURE__ */ jsxs5("span", { className: "sf-card-status", children: [
-        /* @__PURE__ */ jsx5(StatusDot, { tone: status.tone }),
+  return /* @__PURE__ */ jsxs6("li", { className: "sf-card", "data-status": session2.status, children: [
+    /* @__PURE__ */ jsxs6("div", { className: "sf-card-head", children: [
+      /* @__PURE__ */ jsx6("span", { className: "sf-card-net", children: network2.name }),
+      /* @__PURE__ */ jsxs6("span", { className: "sf-card-status", children: [
+        /* @__PURE__ */ jsx6(StatusDot, { tone: status.tone }),
         status.label
       ] }),
-      canRevoke ? /* @__PURE__ */ jsx5(Button2, { disabled: locked, onClick: () => setConfirming(true), size: "xs", type: "button", variant: "outline", children: "Revoke" }) : null
+      canRevoke ? /* @__PURE__ */ jsx6(Button3, { disabled: locked, onClick: () => setConfirming(true), size: "xs", type: "button", variant: "outline", children: "Revoke" }) : null
     ] }),
-    network2.error ? /* @__PURE__ */ jsxs5(Warning, { children: [
+    network2.error ? /* @__PURE__ */ jsxs6(Warning, { children: [
       "Chain read failed. Showing the last good read",
       asOf !== null ? ` (${timeAgo(asOf, now)})` : "",
       "."
     ] }) : null,
-    session2.status === "revoked" || session2.status === "expired" ? /* @__PURE__ */ jsxs5("p", { className: "sf-dim", children: [
+    session2.status === "revoked" || session2.status === "expired" ? /* @__PURE__ */ jsxs6("p", { className: "sf-dim", children: [
       "The agent cannot act on ",
       network2.name,
       " until new permissions are activated."
     ] }) : null,
-    expiry !== null && session2.status !== "revoked" ? /* @__PURE__ */ jsxs5("div", { className: "sf-card-expiry", children: [
-      /* @__PURE__ */ jsxs5("span", { children: [
+    expiry !== null && session2.status !== "revoked" ? /* @__PURE__ */ jsxs6("div", { className: "sf-card-expiry", children: [
+      /* @__PURE__ */ jsxs6("span", { children: [
         expiry <= now ? "Expired" : "Expires",
         " ",
         formatDateTime(expiry)
       ] }),
-      /* @__PURE__ */ jsx5("span", { className: "sf-dim", children: relativeTime(expiry, now) })
+      /* @__PURE__ */ jsx6("span", { className: "sf-dim", children: relativeTime(expiry, now) })
     ] }) : null,
-    session2.scopeText.length > 0 ? /* @__PURE__ */ jsx5("ul", { className: "sf-scope", children: session2.scopeText.map((line, i) => /* @__PURE__ */ jsx5("li", { children: line }, i)) }) : null,
-    /* @__PURE__ */ jsxs5("div", { className: "sf-card-foot", children: [
-      session2.keyId ? /* @__PURE__ */ jsxs5("span", { className: "sf-card-key", children: [
-        /* @__PURE__ */ jsx5("span", { className: "sf-dim", children: "Session key" }),
-        /* @__PURE__ */ jsx5(Hex, { copyLabel: "Copy session key id", value: session2.keyId })
+    session2.scopeText.length > 0 ? /* @__PURE__ */ jsx6("ul", { className: "sf-scope", children: session2.scopeText.map((line, i) => /* @__PURE__ */ jsx6("li", { children: line }, i)) }) : null,
+    /* @__PURE__ */ jsxs6("div", { className: "sf-card-foot", children: [
+      session2.keyId ? /* @__PURE__ */ jsxs6("span", { className: "sf-card-key", children: [
+        /* @__PURE__ */ jsx6("span", { className: "sf-dim", children: "Session key" }),
+        /* @__PURE__ */ jsx6(Hex, { copyLabel: "Copy session key id", value: session2.keyId })
       ] }) : null,
-      /* @__PURE__ */ jsxs5("span", { className: "sf-links", children: [
-        /* @__PURE__ */ jsx5(ExtLink, { href: session2.keystoreKeyUrl, children: "Verify in Keystore" }),
-        /* @__PURE__ */ jsx5(ExtLink, { href: session2.grantTxUrl, children: "Grant transaction" }),
-        /* @__PURE__ */ jsx5(ExtLink, { href: session2.revokeTxUrl, children: "Revoke transaction" })
+      /* @__PURE__ */ jsxs6("span", { className: "sf-links", children: [
+        /* @__PURE__ */ jsx6(ExtLink, { href: session2.keystoreKeyUrl, children: "Verify in Keystore" }),
+        /* @__PURE__ */ jsx6(ExtLink, { href: session2.grantTxUrl, children: "Grant transaction" }),
+        /* @__PURE__ */ jsx6(ExtLink, { href: session2.revokeTxUrl, children: "Revoke transaction" })
       ] })
     ] }),
-    network2.positions.length > 0 ? /* @__PURE__ */ jsx5("ul", { className: "sf-positions", children: network2.positions.map((position2) => /* @__PURE__ */ jsx5(PositionBlock, { dex: network2.dex, position: position2 }, position2.tokenId || position2.pair)) }) : session2.status === "active" ? /* @__PURE__ */ jsx5("p", { className: "sf-empty", children: "No position yet. Ask the agent in chat to open one." }) : null,
-    /* @__PURE__ */ jsx5(
+    network2.positions.length > 0 ? /* @__PURE__ */ jsx6("ul", { className: "sf-positions", children: network2.positions.map((position2) => /* @__PURE__ */ jsx6(PositionBlock, { dex: network2.dex, position: position2 }, position2.tokenId || position2.pair)) }) : session2.status === "active" ? /* @__PURE__ */ jsx6("p", { className: "sf-empty", children: "No position yet." }) : null,
+    session2.status === "active" ? /* @__PURE__ */ jsx6(Plays, { network: network2 }) : null,
+    /* @__PURE__ */ jsx6(
       ConfirmDialog2,
       {
         confirmLabel: "Revoke",
@@ -1115,16 +1272,16 @@ function SessionCard({ network: network2, session: session2 }) {
 function LiveSection({ networks }) {
   const live = networks.filter((n) => n.session !== null);
   if (live.length === 0) return null;
-  return /* @__PURE__ */ jsxs5("section", { className: "sf-live", children: [
-    /* @__PURE__ */ jsx5("h3", { className: "sf-section-title", children: "Agent sessions" }),
-    /* @__PURE__ */ jsx5("ul", { className: "sf-cards", children: live.map((n) => n.session ? /* @__PURE__ */ jsx5(SessionCard, { network: n, session: n.session }, n.key) : null) })
+  return /* @__PURE__ */ jsxs6("section", { className: "sf-live", children: [
+    /* @__PURE__ */ jsx6("h3", { className: "sf-section-title", children: "Agent sessions" }),
+    /* @__PURE__ */ jsx6("ul", { className: "sf-cards", children: live.map((n) => n.session ? /* @__PURE__ */ jsx6(SessionCard, { network: n, session: n.session }, n.key) : null) })
   ] });
 }
 
 // src/permissions.tsx
-import { Badge as Badge4, Button as Button3, Checkbox, ConfirmDialog as ConfirmDialog3, Input, SegmentedControl as SegmentedControl2 } from "@hermes/plugin-sdk";
-import { useId, useState as useState4 } from "react";
-import { Fragment as Fragment2, jsx as jsx6, jsxs as jsxs6 } from "react/jsx-runtime";
+import { Badge as Badge4, Button as Button4, Checkbox, ConfirmDialog as ConfirmDialog3, Input as Input2, SegmentedControl as SegmentedControl2 } from "@hermes/plugin-sdk";
+import { useId as useId2, useState as useState5 } from "react";
+import { Fragment as Fragment2, jsx as jsx7, jsxs as jsxs7 } from "react/jsx-runtime";
 var tokenId = (key, symbol) => `${key}/${symbol}`;
 function initialForm(preset2, draft) {
   const form = { days: String(draft?.durationDays || preset2.durationDays), caps: {}, tokens: {} };
@@ -1169,22 +1326,22 @@ function checkForm(form, preset2, keys) {
   return { errors, request };
 }
 function FieldError({ id, children }) {
-  return /* @__PURE__ */ jsx6("span", { className: "sf-field-error", id, role: "alert", children });
+  return /* @__PURE__ */ jsx7("span", { className: "sf-field-error", id, role: "alert", children });
 }
 function ScopeLists({ draft, networks }) {
   const { now } = usePane();
   const created = parseTime(draft.createdAt);
   const known = networks.filter((n) => draft.networks[n.key]);
-  return /* @__PURE__ */ jsxs6("div", { className: "sf-review", children: [
-    /* @__PURE__ */ jsxs6("div", { className: "sf-review-head", children: [
-      /* @__PURE__ */ jsx6("span", { className: "sf-strong", children: "Reviewed permissions" }),
-      created !== null ? /* @__PURE__ */ jsx6("span", { className: "sf-dim", children: timeAgo(created, now) }) : null
+  return /* @__PURE__ */ jsxs7("div", { className: "sf-review", children: [
+    /* @__PURE__ */ jsxs7("div", { className: "sf-review-head", children: [
+      /* @__PURE__ */ jsx7("span", { className: "sf-strong", children: "Reviewed permissions" }),
+      created !== null ? /* @__PURE__ */ jsx7("span", { className: "sf-dim", children: timeAgo(created, now) }) : null
     ] }),
-    known.map((n) => /* @__PURE__ */ jsxs6("div", { className: "sf-review-net", children: [
-      /* @__PURE__ */ jsx6("div", { className: "sf-review-name", children: n.name }),
-      /* @__PURE__ */ jsx6("ul", { className: "sf-scope", children: (draft.networks[n.key]?.scopeText ?? []).map((line, i) => /* @__PURE__ */ jsx6("li", { children: line }, i)) })
+    known.map((n) => /* @__PURE__ */ jsxs7("div", { className: "sf-review-net", children: [
+      /* @__PURE__ */ jsx7("div", { className: "sf-review-name", children: n.name }),
+      /* @__PURE__ */ jsx7("ul", { className: "sf-scope", children: (draft.networks[n.key]?.scopeText ?? []).map((line, i) => /* @__PURE__ */ jsx7("li", { children: line }, i)) })
     ] }, n.key)),
-    /* @__PURE__ */ jsxs6("div", { className: "sf-dim", children: [
+    /* @__PURE__ */ jsxs7("div", { className: "sf-dim", children: [
       draft.durationDays > 0 ? `${draft.durationDays} ${draft.durationDays === 1 ? "day" : "days"}` : null,
       draft.durationDays > 0 && draft.expiry > 0 ? ", " : null,
       draft.expiry > 0 ? `until ${formatDate(draft.expiry * 1e3)}` : null
@@ -1194,13 +1351,13 @@ function ScopeLists({ draft, networks }) {
 function PermissionsStep({ state, draft, onDraft }) {
   const { store, locked } = usePane();
   const { preset: preset2, mode } = state;
-  const uid = useId();
+  const uid = useId2();
   const keys = [
     ...state.networks.map((n) => n.key).filter((key) => preset2.networks[key]),
     ...Object.keys(preset2.networks).filter((key) => !state.networks.some((n) => n.key === key))
   ];
   const [form, setForm] = useRemembered(`form:${mode}:${preset2.id}`, () => initialForm(preset2, draft));
-  const [attempted, setAttempted] = useState4(false);
+  const [attempted, setAttempted] = useState5(false);
   const review = useAction();
   const reviewedKey = `reviewed:${mode}`;
   const { errors, request } = checkForm(form, preset2, keys);
@@ -1218,22 +1375,22 @@ function PermissionsStep({ state, draft, onDraft }) {
       onDraft(normalizeDraft(data?.draft));
     });
   };
-  return /* @__PURE__ */ jsxs6("form", { className: "sf-form", noValidate: true, onSubmit: submit, children: [
-    /* @__PURE__ */ jsxs6("div", { className: "sf-field", children: [
-      /* @__PURE__ */ jsx6("span", { className: "sf-label", children: "Preset" }),
-      /* @__PURE__ */ jsx6(SegmentedControl2, { onChange: () => void 0, options: [{ id: preset2.id, label: preset2.title }], value: preset2.id })
+  return /* @__PURE__ */ jsxs7("form", { className: "sf-form", noValidate: true, onSubmit: submit, children: [
+    /* @__PURE__ */ jsxs7("div", { className: "sf-field", children: [
+      /* @__PURE__ */ jsx7("span", { className: "sf-label", children: "Preset" }),
+      /* @__PURE__ */ jsx7(SegmentedControl2, { onChange: () => void 0, options: [{ id: preset2.id, label: preset2.title }], value: preset2.id })
     ] }),
-    /* @__PURE__ */ jsx6("div", { className: "sf-cols", children: keys.map((key) => {
+    /* @__PURE__ */ jsx7("div", { className: "sf-cols", children: keys.map((key) => {
       const net = preset2.networks[key];
       if (!net) return null;
       const capId = `${uid}-cap-${key}`;
       const capError = shownErrors[`cap:${key}`];
-      return /* @__PURE__ */ jsxs6("div", { "aria-labelledby": `${capId}-title`, className: "sf-col", role: "group", children: [
-        /* @__PURE__ */ jsx6("div", { className: "sf-col-title", id: `${capId}-title`, children: nameOf(key) }),
-        /* @__PURE__ */ jsxs6("div", { className: "sf-cap", children: [
-          /* @__PURE__ */ jsx6("label", { className: "sf-label", htmlFor: capId, children: "Daily cap" }),
-          /* @__PURE__ */ jsx6(
-            Input,
+      return /* @__PURE__ */ jsxs7("div", { "aria-labelledby": `${capId}-title`, className: "sf-col", role: "group", children: [
+        /* @__PURE__ */ jsx7("div", { className: "sf-col-title", id: `${capId}-title`, children: nameOf(key) }),
+        /* @__PURE__ */ jsxs7("div", { className: "sf-cap", children: [
+          /* @__PURE__ */ jsx7("label", { className: "sf-label", htmlFor: capId, children: "Daily cap" }),
+          /* @__PURE__ */ jsx7(
+            Input2,
             {
               "aria-describedby": capError ? `${capId}-error` : `${capId}-hint`,
               "aria-invalid": capError ? true : void 0,
@@ -1250,7 +1407,7 @@ function PermissionsStep({ state, draft, onDraft }) {
               value: form.caps[key] ?? ""
             }
           ),
-          capError ? /* @__PURE__ */ jsx6(FieldError, { id: `${capId}-error`, children: capError }) : net.native.feeHeadroom ? /* @__PURE__ */ jsxs6("span", { className: "sf-hint", id: `${capId}-hint`, children: [
+          capError ? /* @__PURE__ */ jsx7(FieldError, { id: `${capId}-error`, children: capError }) : net.native.feeHeadroom ? /* @__PURE__ */ jsxs7("span", { className: "sf-hint", id: `${capId}-hint`, children: [
             "includes about ",
             net.native.feeHeadroom,
             " ",
@@ -1265,17 +1422,17 @@ function PermissionsStep({ state, draft, onDraft }) {
           const inputId = `${uid}-tok-${id}`;
           const error = shownErrors[`tok:${id}`];
           const patch = (next) => setForm((prev) => ({ ...prev, tokens: { ...prev.tokens, [id]: { ...field, ...next } } }));
-          return /* @__PURE__ */ jsxs6("div", { className: "sf-token", children: [
-            /* @__PURE__ */ jsx6(Checkbox, { checked: field.checked, id: boxId, onCheckedChange: (checked) => patch({ checked: checked === true }) }),
-            /* @__PURE__ */ jsxs6("label", { className: "sf-token-name", htmlFor: boxId, children: [
-              /* @__PURE__ */ jsx6("span", { className: "sf-strong", children: token.symbol }),
-              token.decimals !== null ? /* @__PURE__ */ jsxs6("span", { className: "sf-dim", children: [
+          return /* @__PURE__ */ jsxs7("div", { className: "sf-token", children: [
+            /* @__PURE__ */ jsx7(Checkbox, { checked: field.checked, id: boxId, onCheckedChange: (checked) => patch({ checked: checked === true }) }),
+            /* @__PURE__ */ jsxs7("label", { className: "sf-token-name", htmlFor: boxId, children: [
+              /* @__PURE__ */ jsx7("span", { className: "sf-strong", children: token.symbol }),
+              token.decimals !== null ? /* @__PURE__ */ jsxs7("span", { className: "sf-dim", children: [
                 token.decimals,
                 " decimals"
               ] }) : null
             ] }),
-            /* @__PURE__ */ jsx6(
-              Input,
+            /* @__PURE__ */ jsx7(
+              Input2,
               {
                 "aria-describedby": error ? `${inputId}-error` : void 0,
                 "aria-invalid": error ? true : void 0,
@@ -1289,15 +1446,15 @@ function PermissionsStep({ state, draft, onDraft }) {
                 value: field.cap
               }
             ),
-            error ? /* @__PURE__ */ jsx6(FieldError, { id: `${inputId}-error`, children: error }) : null
+            error ? /* @__PURE__ */ jsx7(FieldError, { id: `${inputId}-error`, children: error }) : null
           ] }, token.symbol);
         })
       ] }, key);
     }) }),
-    /* @__PURE__ */ jsxs6("div", { className: "sf-field", children: [
-      /* @__PURE__ */ jsx6("label", { className: "sf-label", htmlFor: `${uid}-days`, children: "Duration" }),
-      /* @__PURE__ */ jsx6(
-        Input,
+    /* @__PURE__ */ jsxs7("div", { className: "sf-field", children: [
+      /* @__PURE__ */ jsx7("label", { className: "sf-label", htmlFor: `${uid}-days`, children: "Duration" }),
+      /* @__PURE__ */ jsx7(
+        Input2,
         {
           "aria-describedby": shownErrors.days ? `${uid}-days-error` : void 0,
           "aria-invalid": shownErrors.days ? true : void 0,
@@ -1314,17 +1471,17 @@ function PermissionsStep({ state, draft, onDraft }) {
           value: form.days
         }
       ),
-      shownErrors.days ? /* @__PURE__ */ jsx6(FieldError, { id: `${uid}-days-error`, children: shownErrors.days }) : null
+      shownErrors.days ? /* @__PURE__ */ jsx7(FieldError, { id: `${uid}-days-error`, children: shownErrors.days }) : null
     ] }),
-    /* @__PURE__ */ jsxs6("div", { className: "sf-submit", children: [
-      /* @__PURE__ */ jsxs6("span", { className: "sf-hint", children: [
+    /* @__PURE__ */ jsxs7("div", { className: "sf-submit", children: [
+      /* @__PURE__ */ jsxs7("span", { className: "sf-hint", children: [
         "Nothing is signed in this step.",
         edited ? " The form changed since the last review." : ""
       ] }),
-      /* @__PURE__ */ jsx6(Button3, { disabled: locked, loading: review.busy, size: "sm", type: "submit", variant: draft && !edited ? "outline" : "default", children: "Review permissions" })
+      /* @__PURE__ */ jsx7(Button4, { disabled: locked, loading: review.busy, size: "sm", type: "submit", variant: draft && !edited ? "outline" : "default", children: "Review permissions" })
     ] }),
-    review.error ? /* @__PURE__ */ jsx6(InlineError, { children: review.error }) : null,
-    draft ? /* @__PURE__ */ jsx6(ScopeLists, { draft, networks: state.networks }) : null
+    review.error ? /* @__PURE__ */ jsx7(InlineError, { children: review.error }) : null,
+    draft ? /* @__PURE__ */ jsx7(ScopeLists, { draft, networks: state.networks }) : null
   ] });
 }
 function permissionsSummary(preset2, draft) {
@@ -1333,9 +1490,9 @@ function permissionsSummary(preset2, draft) {
 }
 function ActivateStep({ state, draft, onActivated }) {
   const { store, locked } = usePane();
-  const uid = useId();
+  const uid = useId2();
   const [ticks, setTicks] = useRemembered(`ticks:${draft.id}`, () => ({}));
-  const [confirming, setConfirming] = useState4(false);
+  const [confirming, setConfirming] = useState5(false);
   const rows = [];
   for (const network2 of state.networks) {
     const part = draft.networks[network2.key];
@@ -1346,13 +1503,13 @@ function ActivateStep({ state, draft, onActivated }) {
   }
   const chosen = rows.filter((row) => row.ticked);
   const approvalsHint = chosen.every((row) => row.part.approvals === 1) ? "Each network needs one passkey approval." : `Passkey approvals: ${chosen.map((row) => `${row.part.approvals} on ${row.network.name}`).join(", ")}.`;
-  return /* @__PURE__ */ jsxs6(Fragment2, { children: [
-    /* @__PURE__ */ jsx6("ul", { className: "sf-costs", children: rows.map(({ network: network2, part, enough, ticked }) => {
+  return /* @__PURE__ */ jsxs7(Fragment2, { children: [
+    /* @__PURE__ */ jsx7("ul", { className: "sf-costs", children: rows.map(({ network: network2, part, enough, ticked }) => {
       const boxId = `${uid}-${network2.key}`;
       const symbol = part.cost.nativeSymbol || network2.nativeSymbol;
-      return /* @__PURE__ */ jsxs6("li", { className: "sf-cost", "data-off": !ticked || void 0, children: [
-        /* @__PURE__ */ jsxs6("div", { className: "sf-cost-head", children: [
-          /* @__PURE__ */ jsx6(
+      return /* @__PURE__ */ jsxs7("li", { className: "sf-cost", "data-off": !ticked || void 0, children: [
+        /* @__PURE__ */ jsxs7("div", { className: "sf-cost-head", children: [
+          /* @__PURE__ */ jsx7(
             Checkbox,
             {
               checked: ticked,
@@ -1361,26 +1518,26 @@ function ActivateStep({ state, draft, onActivated }) {
               onCheckedChange: (checked) => setTicks((prev) => ({ ...prev, [network2.key]: checked === true }))
             }
           ),
-          /* @__PURE__ */ jsx6("label", { className: "sf-strong", htmlFor: boxId, children: network2.name })
+          /* @__PURE__ */ jsx7("label", { className: "sf-strong", htmlFor: boxId, children: network2.name })
         ] }),
-        /* @__PURE__ */ jsxs6("dl", { className: "sf-kv", children: [
-          /* @__PURE__ */ jsxs6("div", { children: [
-            /* @__PURE__ */ jsx6("dt", { children: "Keystore fee" }),
-            /* @__PURE__ */ jsx6("dd", { children: /* @__PURE__ */ jsx6(Num, { symbol, value: part.cost.keystoreFee }) })
+        /* @__PURE__ */ jsxs7("dl", { className: "sf-kv", children: [
+          /* @__PURE__ */ jsxs7("div", { children: [
+            /* @__PURE__ */ jsx7("dt", { children: "Keystore fee" }),
+            /* @__PURE__ */ jsx7("dd", { children: /* @__PURE__ */ jsx7(Num, { symbol, value: part.cost.keystoreFee }) })
           ] }),
-          /* @__PURE__ */ jsxs6("div", { children: [
-            /* @__PURE__ */ jsxs6("dt", { children: [
+          /* @__PURE__ */ jsxs7("div", { children: [
+            /* @__PURE__ */ jsxs7("dt", { children: [
               "Relay fee",
-              /* @__PURE__ */ jsx6(Badge4, { size: "xs", variant: "muted", children: "estimate" })
+              /* @__PURE__ */ jsx7(Badge4, { size: "xs", variant: "muted", children: "estimate" })
             ] }),
-            /* @__PURE__ */ jsx6("dd", { children: /* @__PURE__ */ jsx6(Num, { symbol, value: part.cost.relayFeeEstimate }) })
+            /* @__PURE__ */ jsx7("dd", { children: /* @__PURE__ */ jsx7(Num, { symbol, value: part.cost.relayFeeEstimate }) })
           ] }),
-          /* @__PURE__ */ jsxs6("div", { className: "sf-kv-total", children: [
-            /* @__PURE__ */ jsx6("dt", { children: "Total" }),
-            /* @__PURE__ */ jsx6("dd", { children: /* @__PURE__ */ jsx6(Num, { strong: true, symbol, value: part.cost.total }) })
+          /* @__PURE__ */ jsxs7("div", { className: "sf-kv-total", children: [
+            /* @__PURE__ */ jsx7("dt", { children: "Total" }),
+            /* @__PURE__ */ jsx7("dd", { children: /* @__PURE__ */ jsx7(Num, { strong: true, symbol, value: part.cost.total }) })
           ] })
         ] }),
-        !enough ? /* @__PURE__ */ jsxs6(Warning, { children: [
+        !enough ? /* @__PURE__ */ jsxs7(Warning, { children: [
           "Balance too low: send at least ",
           part.cost.total,
           " ",
@@ -1388,11 +1545,11 @@ function ActivateStep({ state, draft, onActivated }) {
         ] }) : null
       ] }, network2.key);
     }) }),
-    /* @__PURE__ */ jsxs6("div", { className: "sf-submit", children: [
-      /* @__PURE__ */ jsx6("span", { className: "sf-hint", children: approvalsHint }),
-      /* @__PURE__ */ jsx6(Button3, { disabled: locked || chosen.length === 0, onClick: () => setConfirming(true), size: "sm", type: "button", children: "Activate" })
+    /* @__PURE__ */ jsxs7("div", { className: "sf-submit", children: [
+      /* @__PURE__ */ jsx7("span", { className: "sf-hint", children: approvalsHint }),
+      /* @__PURE__ */ jsx7(Button4, { disabled: locked || chosen.length === 0, onClick: () => setConfirming(true), size: "sm", type: "button", children: "Activate" })
     ] }),
-    /* @__PURE__ */ jsx6(
+    /* @__PURE__ */ jsx7(
       ConfirmDialog3,
       {
         confirmLabel: "Activate",
@@ -1405,9 +1562,9 @@ function ActivateStep({ state, draft, onActivated }) {
         },
         open: confirming,
         title: chosen.length === 1 ? "Activate on 1 network?" : `Activate on ${chosen.length} networks?`,
-        children: /* @__PURE__ */ jsx6("ul", { className: "sf-dialog sf-confirm-list", children: chosen.map(({ network: network2, part }) => /* @__PURE__ */ jsxs6("li", { children: [
-          /* @__PURE__ */ jsx6("span", { children: network2.name }),
-          /* @__PURE__ */ jsx6(Num, { strong: true, symbol: part.cost.nativeSymbol || network2.nativeSymbol, value: part.cost.total })
+        children: /* @__PURE__ */ jsx7("ul", { className: "sf-dialog sf-confirm-list", children: chosen.map(({ network: network2, part }) => /* @__PURE__ */ jsxs7("li", { children: [
+          /* @__PURE__ */ jsx7("span", { children: network2.name }),
+          /* @__PURE__ */ jsx7(Num, { strong: true, symbol: part.cost.nativeSymbol || network2.nativeSymbol, value: part.cost.total })
         ] }, network2.key)) })
       }
     )
@@ -1419,8 +1576,8 @@ function activateSummary(networks) {
 }
 
 // src/steps.tsx
-import { Badge as Badge5, Button as Button4, CopyButton as CopyButton3, Skeleton as Skeleton2 } from "@hermes/plugin-sdk";
-import { useId as useId2 } from "react";
+import { Badge as Badge5, Button as Button5, CopyButton as CopyButton3, Skeleton as Skeleton2 } from "@hermes/plugin-sdk";
+import { useId as useId3 } from "react";
 
 // src/qr.tsx
 import { useMemo } from "react";
@@ -2073,7 +2230,7 @@ function addBorder(input, border = 1) {
 }
 
 // src/qr.tsx
-import { jsx as jsx7, jsxs as jsxs7 } from "react/jsx-runtime";
+import { jsx as jsx8, jsxs as jsxs8 } from "react/jsx-runtime";
 var QUIET = 4;
 function modulePath(rows) {
   let d = "";
@@ -2100,7 +2257,7 @@ function QrCode2({ value, label, className }) {
     }
   }, [value]);
   if (!symbol) return null;
-  return /* @__PURE__ */ jsxs7(
+  return /* @__PURE__ */ jsxs8(
     "svg",
     {
       "aria-label": label,
@@ -2109,64 +2266,64 @@ function QrCode2({ value, label, className }) {
       shapeRendering: "crispEdges",
       viewBox: `0 0 ${symbol.size} ${symbol.size}`,
       children: [
-        /* @__PURE__ */ jsx7("rect", { fill: "#fff", height: symbol.size, width: symbol.size }),
-        /* @__PURE__ */ jsx7("path", { d: symbol.d, fill: "#000" })
+        /* @__PURE__ */ jsx8("rect", { fill: "#fff", height: symbol.size, width: symbol.size }),
+        /* @__PURE__ */ jsx8("path", { d: symbol.d, fill: "#000" })
       ]
     }
   );
 }
 
 // src/steps.tsx
-import { Fragment as Fragment3, jsx as jsx8, jsxs as jsxs8 } from "react/jsx-runtime";
+import { Fragment as Fragment3, jsx as jsx9, jsxs as jsxs9 } from "react/jsx-runtime";
 function Step({ n, title, status, summary, blocked, open, onToggle, children }) {
-  const bodyId = useId2();
+  const bodyId = useId3();
   const shown = open && !blocked;
-  const label = /* @__PURE__ */ jsxs8(Fragment3, { children: [
-    /* @__PURE__ */ jsxs8("span", { className: "sf-step-title", children: [
-      /* @__PURE__ */ jsxs8("span", { className: "sf-sr", children: [
+  const label = /* @__PURE__ */ jsxs9(Fragment3, { children: [
+    /* @__PURE__ */ jsxs9("span", { className: "sf-step-title", children: [
+      /* @__PURE__ */ jsxs9("span", { className: "sf-sr", children: [
         "Step ",
         n,
         ": "
       ] }),
       title,
-      status === "done" ? /* @__PURE__ */ jsx8("span", { className: "sf-sr", children: " (done)" }) : null
+      status === "done" ? /* @__PURE__ */ jsx9("span", { className: "sf-sr", children: " (done)" }) : null
     ] }),
-    blocked ? /* @__PURE__ */ jsx8("span", { className: "sf-step-summary", children: blocked }) : null,
-    !blocked && !shown && summary ? /* @__PURE__ */ jsx8("span", { className: "sf-step-summary", children: summary }) : null
+    blocked ? /* @__PURE__ */ jsx9("span", { className: "sf-step-summary", children: blocked }) : null,
+    !blocked && !shown && summary ? /* @__PURE__ */ jsx9("span", { className: "sf-step-summary", children: summary }) : null
   ] });
-  return /* @__PURE__ */ jsxs8("li", { className: "sf-step", "data-status": status, children: [
-    /* @__PURE__ */ jsx8("span", { "aria-hidden": "true", className: "sf-step-marker", children: status === "done" ? /* @__PURE__ */ jsx8(IconCheck, { height: 12, width: 12 }) : n }),
-    blocked ? /* @__PURE__ */ jsx8("div", { className: "sf-step-head", children: label }) : /* @__PURE__ */ jsxs8("button", { "aria-controls": bodyId, "aria-expanded": shown, className: "sf-step-head", onClick: onToggle, type: "button", children: [
+  return /* @__PURE__ */ jsxs9("li", { className: "sf-step", "data-status": status, children: [
+    /* @__PURE__ */ jsx9("span", { "aria-hidden": "true", className: "sf-step-marker", children: status === "done" ? /* @__PURE__ */ jsx9(IconCheck, { height: 12, width: 12 }) : n }),
+    blocked ? /* @__PURE__ */ jsx9("div", { className: "sf-step-head", children: label }) : /* @__PURE__ */ jsxs9("button", { "aria-controls": bodyId, "aria-expanded": shown, className: "sf-step-head", onClick: onToggle, type: "button", children: [
       label,
-      /* @__PURE__ */ jsx8(IconChevron, { className: "sf-step-caret", height: 12, width: 12 })
+      /* @__PURE__ */ jsx9(IconChevron, { className: "sf-step-caret", height: 12, width: 12 })
     ] }),
-    /* @__PURE__ */ jsx8("span", { "aria-hidden": "true", className: "sf-step-rail" }),
-    /* @__PURE__ */ jsx8("div", { className: "sf-step-body", id: bodyId, children: shown ? children : null })
+    /* @__PURE__ */ jsx9("span", { "aria-hidden": "true", className: "sf-step-rail" }),
+    /* @__PURE__ */ jsx9("div", { className: "sf-step-body", id: bodyId, children: shown ? children : null })
   ] });
 }
 function GroupedAddress({ value }) {
   const groups = [value.slice(0, 6)];
   for (let i = 6; i < value.length; i += 4) groups.push(value.slice(i, i + 4));
-  return /* @__PURE__ */ jsx8("span", { className: "sf-address", children: groups.map((group, i) => /* @__PURE__ */ jsx8("span", { children: group }, i)) });
+  return /* @__PURE__ */ jsx9("span", { className: "sf-address", children: groups.map((group, i) => /* @__PURE__ */ jsx9("span", { children: group }, i)) });
 }
 function WalletStep({ address }) {
   const { store, locked } = usePane();
   const create = useAction();
   const recover = useAction();
   if (address) {
-    return /* @__PURE__ */ jsxs8("div", { className: "sf-wallet", children: [
-      /* @__PURE__ */ jsxs8("div", { className: "sf-wallet-main", children: [
-        /* @__PURE__ */ jsx8(GroupedAddress, { value: address }),
-        /* @__PURE__ */ jsx8(CopyButton3, { buttonSize: "xs", buttonVariant: "outline", label: "Copy address", text: address, children: "Copy address" })
+    return /* @__PURE__ */ jsxs9("div", { className: "sf-wallet", children: [
+      /* @__PURE__ */ jsxs9("div", { className: "sf-wallet-main", children: [
+        /* @__PURE__ */ jsx9(GroupedAddress, { value: address }),
+        /* @__PURE__ */ jsx9(CopyButton3, { buttonSize: "xs", buttonVariant: "outline", label: "Copy address", text: address, children: "Copy address" })
       ] }),
-      /* @__PURE__ */ jsx8(QrCode2, { className: "sf-qr", label: "QR code of the wallet address", value: address })
+      /* @__PURE__ */ jsx9(QrCode2, { className: "sf-qr", label: "QR code of the wallet address", value: address })
     ] });
   }
-  return /* @__PURE__ */ jsxs8(Fragment3, { children: [
-    /* @__PURE__ */ jsx8("p", { className: "sf-copy", children: "The admin key is a passkey that stays on your device." }),
-    /* @__PURE__ */ jsxs8("div", { className: "sf-actions", children: [
-      /* @__PURE__ */ jsx8(
-        Button4,
+  return /* @__PURE__ */ jsxs9(Fragment3, { children: [
+    /* @__PURE__ */ jsx9("p", { className: "sf-copy", children: "The admin key is a passkey that stays on your device." }),
+    /* @__PURE__ */ jsxs9("div", { className: "sf-actions", children: [
+      /* @__PURE__ */ jsx9(
+        Button5,
         {
           disabled: locked || recover.busy,
           loading: create.busy,
@@ -2179,8 +2336,8 @@ function WalletStep({ address }) {
           children: "Create wallet"
         }
       ),
-      /* @__PURE__ */ jsx8(
-        Button4,
+      /* @__PURE__ */ jsx9(
+        Button5,
         {
           disabled: locked || create.busy,
           loading: recover.busy,
@@ -2195,29 +2352,29 @@ function WalletStep({ address }) {
         }
       )
     ] }),
-    create.error ? /* @__PURE__ */ jsx8(InlineError, { children: create.error }) : null,
-    recover.error ? /* @__PURE__ */ jsx8(InlineError, { children: recover.error }) : null
+    create.error ? /* @__PURE__ */ jsx9(InlineError, { children: create.error }) : null,
+    recover.error ? /* @__PURE__ */ jsx9(InlineError, { children: recover.error }) : null
   ] });
 }
-var walletSummary = (address) => address ? /* @__PURE__ */ jsx8("span", { className: "sf-mono", children: shortHex(address) }) : null;
+var walletSummary = (address) => address ? /* @__PURE__ */ jsx9("span", { className: "sf-mono", children: shortHex(address) }) : null;
 function NetworkRow({ network: network2 }) {
   const { now } = usePane();
   const asOf = parseTime(network2.asOf);
   const held = (network2.balances?.tokens ?? []).filter((t) => isPositive(t.amount));
-  return /* @__PURE__ */ jsxs8("li", { className: "sf-net", children: [
-    /* @__PURE__ */ jsxs8("div", { className: "sf-net-id", children: [
-      /* @__PURE__ */ jsx8("span", { className: "sf-net-name", children: network2.name }),
-      /* @__PURE__ */ jsxs8("span", { className: "sf-links", children: [
-        /* @__PURE__ */ jsx8(ExtLink, { href: network2.addressUrl, children: "Explorer" }),
-        /* @__PURE__ */ jsx8(ExtLink, { href: network2.keystoreAccountUrl, children: "Keystore" })
+  return /* @__PURE__ */ jsxs9("li", { className: "sf-net", children: [
+    /* @__PURE__ */ jsxs9("div", { className: "sf-net-id", children: [
+      /* @__PURE__ */ jsx9("span", { className: "sf-net-name", children: network2.name }),
+      /* @__PURE__ */ jsxs9("span", { className: "sf-links", children: [
+        /* @__PURE__ */ jsx9(ExtLink, { href: network2.addressUrl, children: "Explorer" }),
+        /* @__PURE__ */ jsx9(ExtLink, { href: network2.keystoreAccountUrl, children: "Keystore" })
       ] })
     ] }),
-    /* @__PURE__ */ jsxs8("div", { className: "sf-net-figures", children: [
-      /* @__PURE__ */ jsx8("span", { className: "sf-net-balance", children: network2.balances ? /* @__PURE__ */ jsx8(Num, { strong: true, symbol: network2.nativeSymbol, value: network2.balances.native }) : network2.error ? /* @__PURE__ */ jsx8("span", { className: "sf-dim", children: "unavailable" }) : /* @__PURE__ */ jsx8(Skeleton2, { style: { width: 96, height: 14 } }) }),
-      held.map((token) => /* @__PURE__ */ jsx8("span", { className: "sf-net-token", children: /* @__PURE__ */ jsx8(Num, { symbol: token.symbol, value: token.amount }) }, token.symbol)),
-      /* @__PURE__ */ jsx8("span", { className: "sf-net-asof", children: asOf !== null ? timeAgo(asOf, now) : null })
+    /* @__PURE__ */ jsxs9("div", { className: "sf-net-figures", children: [
+      /* @__PURE__ */ jsx9("span", { className: "sf-net-balance", children: network2.balances ? /* @__PURE__ */ jsx9(Num, { strong: true, symbol: network2.nativeSymbol, value: network2.balances.native }) : network2.error ? /* @__PURE__ */ jsx9("span", { className: "sf-dim", children: "unavailable" }) : /* @__PURE__ */ jsx9(Skeleton2, { style: { width: 96, height: 14 } }) }),
+      held.map((token) => /* @__PURE__ */ jsx9("span", { className: "sf-net-token", children: /* @__PURE__ */ jsx9(Num, { symbol: token.symbol, value: token.amount }) }, token.symbol)),
+      /* @__PURE__ */ jsx9("span", { className: "sf-net-asof", children: asOf !== null ? timeAgo(asOf, now) : null })
     ] }),
-    network2.error ? /* @__PURE__ */ jsx8("div", { className: "sf-net-error", children: /* @__PURE__ */ jsx8(Warning, { children: network2.error }) }) : null
+    network2.error ? /* @__PURE__ */ jsx9("div", { className: "sf-net-error", children: /* @__PURE__ */ jsx9(Warning, { children: network2.error }) }) : null
   ] });
 }
 function FundStep({ address, networks, onWithdraw }) {
@@ -2225,20 +2382,20 @@ function FundStep({ address, networks, onWithdraw }) {
   const anything = networks.some(
     (n) => n.balances !== null && (isPositive(n.balances.native) || n.balances.tokens.some((t) => isPositive(t.amount)))
   );
-  return /* @__PURE__ */ jsxs8(Fragment3, { children: [
-    /* @__PURE__ */ jsxs8("div", { className: "sf-fund-address", children: [
-      /* @__PURE__ */ jsx8("span", { className: "sf-badges", children: networks.map((n) => /* @__PURE__ */ jsx8(Badge5, { variant: "muted", children: n.shortName }, n.key)) }),
-      /* @__PURE__ */ jsx8(Hex, { copyLabel: "Copy address", fit: true, value: address })
+  return /* @__PURE__ */ jsxs9(Fragment3, { children: [
+    /* @__PURE__ */ jsxs9("div", { className: "sf-fund-address", children: [
+      /* @__PURE__ */ jsx9("span", { className: "sf-badges", children: networks.map((n) => /* @__PURE__ */ jsx9(Badge5, { variant: "muted", children: n.shortName }, n.key)) }),
+      /* @__PURE__ */ jsx9(Hex, { copyLabel: "Copy address", fit: true, value: address })
     ] }),
-    /* @__PURE__ */ jsx8("p", { className: "sf-copy", children: "Same address on both networks. Send ETH only on Ethereum. Send BNB only on BNB Chain." }),
-    /* @__PURE__ */ jsx8("ul", { className: "sf-nets", children: networks.map((n) => /* @__PURE__ */ jsx8(NetworkRow, { network: n }, n.key)) }),
-    /* @__PURE__ */ jsx8("div", { className: "sf-actions", children: /* @__PURE__ */ jsx8(Button4, { disabled: locked || !anything, onClick: onWithdraw, size: "sm", type: "button", variant: "outline", children: "Withdraw" }) })
+    /* @__PURE__ */ jsx9("p", { className: "sf-copy", children: "Same address on both networks. Send ETH only on Ethereum. Send BNB only on BNB Chain." }),
+    /* @__PURE__ */ jsx9("ul", { className: "sf-nets", children: networks.map((n) => /* @__PURE__ */ jsx9(NetworkRow, { network: n }, n.key)) }),
+    /* @__PURE__ */ jsx9("div", { className: "sf-actions", children: /* @__PURE__ */ jsx9(Button5, { disabled: locked || !anything, onClick: onWithdraw, size: "sm", type: "button", variant: "outline", children: "Withdraw" }) })
   ] });
 }
 function fundSummary(networks) {
   const parts = networks.filter((n) => n.balances !== null);
   if (parts.length === 0) return null;
-  return /* @__PURE__ */ jsx8("span", { className: "sf-summary-nums", children: parts.map((n) => /* @__PURE__ */ jsx8(Num, { symbol: n.nativeSymbol, value: n.balances?.native ?? "0" }, n.key)) });
+  return /* @__PURE__ */ jsx9("span", { className: "sf-summary-nums", children: parts.map((n) => /* @__PURE__ */ jsx9(Num, { symbol: n.nativeSymbol, value: n.balances?.native ?? "0" }, n.key)) });
 }
 
 // src/styles.ts
@@ -2455,6 +2612,19 @@ button.sf-step-head:hover .sf-step-caret{color:var(--sf-fg)}
 .sf-live{display:flex;flex-direction:column;gap:10px;padding-top:14px;border-top:1px solid var(--sf-line)}
 .sf-section-title{font-size:13px;font-weight:600}
 .sf-cards{display:flex;flex-direction:column;gap:12px}
+.sf-plays{display:flex;flex-direction:column;gap:6px;margin-top:4px;padding-top:10px;border-top:1px solid var(--sf-line)}
+.sf-plays-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
+.sf-play-list{display:flex;flex-direction:column;gap:0;margin:0;padding:0;list-style:none}
+.sf-play{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-top:1px solid color-mix(in srgb,var(--sf-line) 60%,transparent)}
+.sf-play:first-child{border-top:0}
+.sf-play-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sf-play-title{font-size:12.5px;font-weight:600}
+.sf-play-blurb{color:var(--sf-fg2);font-size:12px;line-height:1.4}
+.sf-play-fields{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px}
+.sf-play-field{width:150px}
+.sf-play-field:nth-of-type(2){width:104px}
+.sf-play-note{color:var(--sf-accent);font-size:11.5px;margin-top:2px}
+.sf-play-actions{flex:none;display:flex;flex-direction:column;gap:4px;align-items:stretch}
 .sf-card{display:flex;flex-direction:column;gap:8px;min-width:0;padding:12px;border:1px solid var(--sf-line);border-radius:4px}
 .sf-card-head{display:flex;align-items:center;gap:10px;min-height:22px}
 .sf-card-net{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600}
@@ -2505,18 +2675,18 @@ button.sf-step-head:hover .sf-step-caret{color:var(--sf-fg)}
 
 // src/withdraw.tsx
 import {
-  Button as Button5,
+  Button as Button6,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Input as Input2,
+  Input as Input3,
   SegmentedControl as SegmentedControl3
 } from "@hermes/plugin-sdk";
-import { useEffect as useEffect2, useId as useId3, useRef as useRef2, useState as useState5 } from "react";
-import { jsx as jsx9, jsxs as jsxs9 } from "react/jsx-runtime";
+import { useEffect as useEffect2, useId as useId4, useRef as useRef2, useState as useState6 } from "react";
+import { jsx as jsx10, jsxs as jsxs10 } from "react/jsx-runtime";
 function assetsOf(network2) {
   if (!network2) return [];
   const native = { symbol: network2.nativeSymbol, amount: network2.balances?.native ?? "" };
@@ -2530,16 +2700,16 @@ function WithdrawDialog(props) {
   useEffect2(() => {
     if (open) clear();
   }, [open, clear]);
-  return /* @__PURE__ */ jsx9(Dialog, { onOpenChange: (next) => !next && !send.busy && props.onClose(), open, children: open ? /* @__PURE__ */ jsx9(WithdrawForm, { ...props, send }) : null });
+  return /* @__PURE__ */ jsx10(Dialog, { onOpenChange: (next) => !next && !send.busy && props.onClose(), open, children: open ? /* @__PURE__ */ jsx10(WithdrawForm, { ...props, send }) : null });
 }
 function WithdrawForm({ onClose, address, networks, send }) {
   const { store } = usePane();
-  const uid = useId3();
-  const [networkKey, setNetworkKey] = useState5(() => (networks.find(hasFunds) ?? networks[0])?.key ?? "");
-  const [symbol, setSymbol] = useState5(null);
-  const [amount, setAmount] = useState5("");
-  const [to, setTo] = useState5("");
-  const [attempted, setAttempted] = useState5(false);
+  const uid = useId4();
+  const [networkKey, setNetworkKey] = useState6(() => (networks.find(hasFunds) ?? networks[0])?.key ?? "");
+  const [symbol, setSymbol] = useState6(null);
+  const [amount, setAmount] = useState6("");
+  const [to, setTo] = useState6("");
+  const [attempted, setAttempted] = useState6(false);
   const amountRef = useRef2(null);
   const network2 = networks.find((n) => n.key === networkKey);
   const assets = assetsOf(network2);
@@ -2580,7 +2750,7 @@ function WithdrawForm({ onClose, address, networks, send }) {
       if (ok) onClose();
     });
   };
-  return /* @__PURE__ */ jsxs9(
+  return /* @__PURE__ */ jsxs10(
     DialogContent,
     {
       className: "sf-dialog-shell",
@@ -2589,14 +2759,14 @@ function WithdrawForm({ onClose, address, networks, send }) {
         amountRef.current?.focus();
       },
       children: [
-        /* @__PURE__ */ jsxs9(DialogHeader, { children: [
-          /* @__PURE__ */ jsx9(DialogTitle, { children: "Withdraw" }),
-          /* @__PURE__ */ jsx9(DialogDescription, { children: "You approve the withdrawal with your passkey in the browser." })
+        /* @__PURE__ */ jsxs10(DialogHeader, { children: [
+          /* @__PURE__ */ jsx10(DialogTitle, { children: "Withdraw" }),
+          /* @__PURE__ */ jsx10(DialogDescription, { children: "You approve the withdrawal with your passkey in the browser." })
         ] }),
-        /* @__PURE__ */ jsxs9("form", { className: "sf-dialog sf-form", id: `${uid}-form`, noValidate: true, onSubmit: submit, children: [
-          /* @__PURE__ */ jsxs9("div", { className: "sf-field", children: [
-            /* @__PURE__ */ jsx9("span", { className: "sf-label", children: "Network" }),
-            /* @__PURE__ */ jsx9(
+        /* @__PURE__ */ jsxs10("form", { className: "sf-dialog sf-form", id: `${uid}-form`, noValidate: true, onSubmit: submit, children: [
+          /* @__PURE__ */ jsxs10("div", { className: "sf-field", children: [
+            /* @__PURE__ */ jsx10("span", { className: "sf-label", children: "Network" }),
+            /* @__PURE__ */ jsx10(
               SegmentedControl3,
               {
                 onChange: (key) => {
@@ -2610,9 +2780,9 @@ function WithdrawForm({ onClose, address, networks, send }) {
               }
             )
           ] }),
-          /* @__PURE__ */ jsx9("div", { "aria-label": "Asset", className: "sf-assets", onKeyDown: onAssetKey, role: "radiogroup", children: assets.map((a) => {
+          /* @__PURE__ */ jsx10("div", { "aria-label": "Asset", className: "sf-assets", onKeyDown: onAssetKey, role: "radiogroup", children: assets.map((a) => {
             const selected = a.symbol === asset?.symbol;
-            return /* @__PURE__ */ jsxs9(
+            return /* @__PURE__ */ jsxs10(
               "button",
               {
                 "aria-checked": selected,
@@ -2624,21 +2794,21 @@ function WithdrawForm({ onClose, address, networks, send }) {
                 tabIndex: selected ? 0 : -1,
                 type: "button",
                 children: [
-                  /* @__PURE__ */ jsx9("span", { className: "sf-asset-dot" }),
-                  /* @__PURE__ */ jsx9("span", { className: "sf-strong", children: a.symbol }),
-                  isDecimal(a.amount) ? /* @__PURE__ */ jsx9(Num, { value: a.amount }) : /* @__PURE__ */ jsx9("span", { className: "sf-dim", children: "balance not read" })
+                  /* @__PURE__ */ jsx10("span", { className: "sf-asset-dot" }),
+                  /* @__PURE__ */ jsx10("span", { className: "sf-strong", children: a.symbol }),
+                  isDecimal(a.amount) ? /* @__PURE__ */ jsx10(Num, { value: a.amount }) : /* @__PURE__ */ jsx10("span", { className: "sf-dim", children: "balance not read" })
                 ]
               },
               a.symbol
             );
           }) }),
-          /* @__PURE__ */ jsxs9("div", { className: "sf-stack", children: [
-            /* @__PURE__ */ jsxs9("div", { className: "sf-label-row", children: [
-              /* @__PURE__ */ jsx9("label", { className: "sf-label", htmlFor: `${uid}-amount`, children: "Amount" }),
-              asset && known && isPositive(asset.amount) ? /* @__PURE__ */ jsx9(Button5, { onClick: () => setAmount(isNative ? "max" : asset.amount), size: "inline", type: "button", variant: "text", children: "Max" }) : null
+          /* @__PURE__ */ jsxs10("div", { className: "sf-stack", children: [
+            /* @__PURE__ */ jsxs10("div", { className: "sf-label-row", children: [
+              /* @__PURE__ */ jsx10("label", { className: "sf-label", htmlFor: `${uid}-amount`, children: "Amount" }),
+              asset && known && isPositive(asset.amount) ? /* @__PURE__ */ jsx10(Button6, { onClick: () => setAmount(isNative ? "max" : asset.amount), size: "inline", type: "button", variant: "text", children: "Max" }) : null
             ] }),
-            /* @__PURE__ */ jsx9(
-              Input2,
+            /* @__PURE__ */ jsx10(
+              Input3,
               {
                 "aria-describedby": attempted && amountError ? `${uid}-amount-error` : void 0,
                 "aria-invalid": attempted && amountError ? true : void 0,
@@ -2653,16 +2823,16 @@ function WithdrawForm({ onClose, address, networks, send }) {
                 value: amount
               }
             ),
-            attempted && amountError ? /* @__PURE__ */ jsx9("span", { className: "sf-field-error", id: `${uid}-amount-error`, role: "alert", children: amountError }) : null,
-            isNative ? /* @__PURE__ */ jsx9("span", { className: "sf-hint", children: isMax ? "Sends everything except the network fee." : "The network fee is paid from this balance. Max leaves it behind." }) : null
+            attempted && amountError ? /* @__PURE__ */ jsx10("span", { className: "sf-field-error", id: `${uid}-amount-error`, role: "alert", children: amountError }) : null,
+            isNative ? /* @__PURE__ */ jsx10("span", { className: "sf-hint", children: isMax ? "Sends everything except the network fee." : "The network fee is paid from this balance. Max leaves it behind." }) : null
           ] }),
-          /* @__PURE__ */ jsxs9("div", { className: "sf-stack", children: [
-            /* @__PURE__ */ jsxs9("label", { className: "sf-label", htmlFor: `${uid}-to`, children: [
+          /* @__PURE__ */ jsxs10("div", { className: "sf-stack", children: [
+            /* @__PURE__ */ jsxs10("label", { className: "sf-label", htmlFor: `${uid}-to`, children: [
               "To address",
               network2 ? ` on ${network2.name}` : ""
             ] }),
-            /* @__PURE__ */ jsx9(
-              Input2,
+            /* @__PURE__ */ jsx10(
+              Input3,
               {
                 "aria-describedby": attempted && toError ? `${uid}-to-error` : void 0,
                 "aria-invalid": attempted && toError ? true : void 0,
@@ -2673,13 +2843,13 @@ function WithdrawForm({ onClose, address, networks, send }) {
                 value: to
               }
             ),
-            attempted && toError ? /* @__PURE__ */ jsx9("span", { className: "sf-field-error", id: `${uid}-to-error`, role: "alert", children: toError }) : null
+            attempted && toError ? /* @__PURE__ */ jsx10("span", { className: "sf-field-error", id: `${uid}-to-error`, role: "alert", children: toError }) : null
           ] }),
-          send.error ? /* @__PURE__ */ jsx9(InlineError, { children: send.error }) : null
+          send.error ? /* @__PURE__ */ jsx10(InlineError, { children: send.error }) : null
         ] }),
-        /* @__PURE__ */ jsxs9(DialogFooter, { children: [
-          /* @__PURE__ */ jsx9(Button5, { disabled: send.busy, onClick: onClose, type: "button", variant: "ghost", children: "Cancel" }),
-          /* @__PURE__ */ jsx9(Button5, { disabled: !network2 || !asset, form: `${uid}-form`, loading: send.busy, type: "submit", children: "Withdraw" })
+        /* @__PURE__ */ jsxs10(DialogFooter, { children: [
+          /* @__PURE__ */ jsx10(Button6, { disabled: send.busy, onClick: onClose, type: "button", variant: "ghost", children: "Cancel" }),
+          /* @__PURE__ */ jsx10(Button6, { disabled: !network2 || !asset, form: `${uid}-form`, loading: send.busy, type: "submit", children: "Withdraw" })
         ] })
       ]
     }
@@ -2687,7 +2857,7 @@ function WithdrawForm({ onClose, address, networks, send }) {
 }
 
 // src/app.tsx
-import { jsx as jsx10, jsxs as jsxs10 } from "react/jsx-runtime";
+import { jsx as jsx11, jsxs as jsxs11 } from "react/jsx-runtime";
 var CLOCK_MS = 3e4;
 function pickDraft(fromState, fromGrant) {
   if (!fromGrant) return fromState;
@@ -2698,14 +2868,14 @@ function pickDraft(fromState, fromGrant) {
   return a !== null && b !== null && b > a ? fromGrant : fromState;
 }
 function LoadingBody() {
-  return /* @__PURE__ */ jsx10("div", { "aria-busy": "true", "aria-label": "Loading the wallet", className: "sf-loading", role: "status", children: [168, 96, 132, 104].map((width, i) => /* @__PURE__ */ jsxs10("div", { className: "sf-loading-row", children: [
-    /* @__PURE__ */ jsx10(Skeleton3, { style: { width: 20, height: 20 } }),
-    /* @__PURE__ */ jsx10(Skeleton3, { style: { width, height: 14 } })
+  return /* @__PURE__ */ jsx11("div", { "aria-busy": "true", "aria-label": "Loading the wallet", className: "sf-loading", role: "status", children: [168, 96, 132, 104].map((width, i) => /* @__PURE__ */ jsxs11("div", { className: "sf-loading-row", children: [
+    /* @__PURE__ */ jsx11(Skeleton3, { style: { width: 20, height: 20 } }),
+    /* @__PURE__ */ jsx11(Skeleton3, { style: { width, height: 14 } })
   ] }, i)) });
 }
 function FailedBody({ title, message, onRetry }) {
   const retry = useAction();
-  return /* @__PURE__ */ jsx10("div", { className: "sf-failed", children: /* @__PURE__ */ jsx10(ErrorState, { description: message, title, children: /* @__PURE__ */ jsx10("div", { className: "sf-failed-actions", children: /* @__PURE__ */ jsx10(Button6, { loading: retry.busy, onClick: () => void retry.run(onRetry), size: "sm", type: "button", variant: "outline", children: "Try again" }) }) }) });
+  return /* @__PURE__ */ jsx11("div", { className: "sf-failed", children: /* @__PURE__ */ jsx11(ErrorState, { description: message, title, children: /* @__PURE__ */ jsx11("div", { className: "sf-failed-actions", children: /* @__PURE__ */ jsx11(Button7, { loading: retry.busy, onClick: () => void retry.run(onRetry), size: "sm", type: "button", variant: "outline", children: "Try again" }) }) }) });
 }
 function Steps({ state, draft, onDraft, onWithdraw }) {
   const { wallet, networks, preset: preset2, mode } = state;
@@ -2728,9 +2898,9 @@ function Steps({ state, draft, onDraft, onWithdraw }) {
   );
   const isOpen = (i) => toggled[i] ?? defaults[i] ?? false;
   const toggle = (i) => () => setToggled((prev) => ({ ...prev, [i]: !(prev[i] ?? defaults[i] ?? false) }));
-  return /* @__PURE__ */ jsxs10("ol", { className: "sf-steps", children: [
-    /* @__PURE__ */ jsx10(Step, { n: 1, onToggle: toggle(0), open: isOpen(0), status: statusOf2(0), summary: walletSummary(address), title: "Create wallet", children: /* @__PURE__ */ jsx10(WalletStep, { address }) }),
-    /* @__PURE__ */ jsx10(
+  return /* @__PURE__ */ jsxs11("ol", { className: "sf-steps", children: [
+    /* @__PURE__ */ jsx11(Step, { n: 1, onToggle: toggle(0), open: isOpen(0), status: statusOf2(0), summary: walletSummary(address), title: "Create wallet", children: /* @__PURE__ */ jsx11(WalletStep, { address }) }),
+    /* @__PURE__ */ jsx11(
       Step,
       {
         blocked: blocked[1],
@@ -2740,10 +2910,10 @@ function Steps({ state, draft, onDraft, onWithdraw }) {
         status: statusOf2(1),
         summary: fundSummary(networks),
         title: "Fund",
-        children: address !== null ? /* @__PURE__ */ jsx10(FundStep, { address, networks, onWithdraw }) : null
+        children: address !== null ? /* @__PURE__ */ jsx11(FundStep, { address, networks, onWithdraw }) : null
       }
     ),
-    /* @__PURE__ */ jsx10(
+    /* @__PURE__ */ jsx11(
       Step,
       {
         blocked: blocked[2],
@@ -2753,7 +2923,7 @@ function Steps({ state, draft, onDraft, onWithdraw }) {
         status: statusOf2(2),
         summary: permissionsSummary(preset2, draft),
         title: "Set permissions",
-        children: /* @__PURE__ */ jsx10(
+        children: /* @__PURE__ */ jsx11(
           PermissionsStep,
           {
             draft,
@@ -2767,7 +2937,7 @@ function Steps({ state, draft, onDraft, onWithdraw }) {
         )
       }
     ),
-    /* @__PURE__ */ jsx10(
+    /* @__PURE__ */ jsx11(
       Step,
       {
         blocked: blocked[3],
@@ -2777,7 +2947,7 @@ function Steps({ state, draft, onDraft, onWithdraw }) {
         status: statusOf2(3),
         summary: activateSummary(networks),
         title: "Activate",
-        children: draft !== null ? /* @__PURE__ */ jsx10(ActivateStep, { draft, onActivated: () => onDraft(null), state }, draft.id) : null
+        children: draft !== null ? /* @__PURE__ */ jsx11(ActivateStep, { draft, onActivated: () => onDraft(null), state }, draft.id) : null
       }
     )
   ] });
@@ -2786,10 +2956,10 @@ function Pane({ ctx, store }) {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const { state, error, loading } = snapshot;
   const rootRef = useRef3(null);
-  const [now, setNow] = useState6(() => Date.now());
-  const [pendingMode, setPendingMode] = useState6(null);
-  const [grantDraft, setGrantDraft] = useState6(null);
-  const [withdrawing, setWithdrawing] = useState6(false);
+  const [now, setNow] = useState7(() => Date.now());
+  const [pendingMode, setPendingMode] = useState7(null);
+  const [grantDraft, setGrantDraft] = useState7(null);
+  const [withdrawing, setWithdrawing] = useState7(false);
   useEffect3(
     () => store.attach(() => {
       const el = rootRef.current;
@@ -2822,26 +2992,26 @@ function Pane({ ctx, store }) {
   );
   let body;
   if (error?.forbidden) {
-    body = /* @__PURE__ */ jsx10(FailedBody, { message: error.message, onRetry: store.refresh, title: "Local Desktop only" });
+    body = /* @__PURE__ */ jsx11(FailedBody, { message: error.message, onRetry: store.refresh, title: "Local Desktop only" });
   } else if (!state) {
-    body = loading || !error ? /* @__PURE__ */ jsx10(LoadingBody, {}) : /* @__PURE__ */ jsx10(FailedBody, { message: error.message, onRetry: store.refresh, title: "Wallet not loaded" });
+    body = loading || !error ? /* @__PURE__ */ jsx11(LoadingBody, {}) : /* @__PURE__ */ jsx11(FailedBody, { message: error.message, onRetry: store.refresh, title: "Wallet not loaded" });
   } else {
-    body = /* @__PURE__ */ jsxs10("div", { className: "sf-content", "data-busy": jobIsActive(job2) || void 0, "data-pending": pendingMode !== null || void 0, children: [
-      error ? /* @__PURE__ */ jsxs10(Warning, { children: [
+    body = /* @__PURE__ */ jsxs11("div", { className: "sf-content", "data-busy": jobIsActive(job2) || void 0, "data-pending": pendingMode !== null || void 0, children: [
+      error ? /* @__PURE__ */ jsxs11(Warning, { children: [
         "Not refreshed. ",
         error.message
       ] }) : null,
-      /* @__PURE__ */ jsx10(Steps, { draft, onDraft, onWithdraw: () => setWithdrawing(true), state }),
-      /* @__PURE__ */ jsx10(LiveSection, { networks: state.networks })
+      /* @__PURE__ */ jsx11(Steps, { draft, onDraft, onWithdraw: () => setWithdrawing(true), state }),
+      /* @__PURE__ */ jsx11(LiveSection, { networks: state.networks })
     ] });
   }
-  return /* @__PURE__ */ jsxs10(PaneContext.Provider, { value: env, children: [
-    /* @__PURE__ */ jsx10("style", { children: PANE_CSS }),
-    /* @__PURE__ */ jsxs10("div", { className: "sf-root", "data-mode": pendingMode ?? mode ?? void 0, ref: rootRef, children: [
-      /* @__PURE__ */ jsx10(Header, { disabled: jobIsActive(job2), loading, mode, onSwitch: switchMode, pending: pendingMode }),
-      job2 && !error?.forbidden ? /* @__PURE__ */ jsx10(JobBanner, { job: job2, networks: state?.networks ?? [], openFailed: snapshot.passkeyOpenFailed }) : null,
-      /* @__PURE__ */ jsx10("div", { className: "sf-scroll", children: body }),
-      state?.wallet ? /* @__PURE__ */ jsx10(
+  return /* @__PURE__ */ jsxs11(PaneContext.Provider, { value: env, children: [
+    /* @__PURE__ */ jsx11("style", { children: PANE_CSS }),
+    /* @__PURE__ */ jsxs11("div", { className: "sf-root", "data-mode": pendingMode ?? mode ?? void 0, ref: rootRef, children: [
+      /* @__PURE__ */ jsx11(Header, { disabled: jobIsActive(job2), loading, mode, onSwitch: switchMode, pending: pendingMode }),
+      job2 && !error?.forbidden ? /* @__PURE__ */ jsx11(JobBanner, { job: job2, networks: state?.networks ?? [], openFailed: snapshot.passkeyOpenFailed }) : null,
+      /* @__PURE__ */ jsx11("div", { className: "sf-scroll", children: body }),
+      state?.wallet ? /* @__PURE__ */ jsx11(
         WithdrawDialog,
         {
           address: state.wallet.address,
@@ -2855,7 +3025,7 @@ function Pane({ ctx, store }) {
 }
 
 // src/plugin.tsx
-import { jsx as jsx11 } from "react/jsx-runtime";
+import { jsx as jsx12 } from "react/jsx-runtime";
 var PANE_WIDTH = "26rem";
 var PANE_MIN_WIDTH = "20rem";
 var PANE_MAX_WIDTH = "36rem";
@@ -2878,7 +3048,7 @@ var plugin = {
         minWidth: PANE_MIN_WIDTH,
         maxWidth: PANE_MAX_WIDTH
       },
-      render: () => /* @__PURE__ */ jsx11(Pane, { ctx, store })
+      render: () => /* @__PURE__ */ jsx12(Pane, { ctx, store })
     });
   }
 };
