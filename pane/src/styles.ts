@@ -216,12 +216,14 @@ button.sf-step-head:hover .sf-step-caret{color:var(--sf-fg)}
 .sf-live{display:flex;flex-direction:column;gap:10px;padding-top:14px;border-top:1px solid var(--sf-line)}
 .sf-section-title{font-size:13px;font-weight:600}
 .sf-cards{display:flex;flex-direction:column;gap:12px}
-.sf-plays{display:flex;flex-direction:column;gap:6px;margin-top:4px;padding-top:10px;border-top:1px solid var(--sf-line)}
+.sf-section{margin:0;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--sf-fg2)}
+.sf-card > .sf-section{margin-top:6px}
+.sf-plays{display:flex;flex-direction:column;gap:6px;margin-top:6px;padding:10px 12px 4px;border:1px solid var(--sf-line);border-radius:6px;background:var(--sf-wash)}
+.sf-plays[data-stage=start] .sf-section{color:var(--sf-accent);font-size:12px}
 .sf-plays[data-stage=start]{margin-top:2px;padding:10px 12px 4px;border:1px solid color-mix(in srgb,var(--sf-accent) 45%,transparent);border-radius:6px;background:color-mix(in srgb,var(--sf-accent) 7%,transparent)}
-.sf-plays[data-stage=start] .sf-plays-head .sf-strong{font-size:13.5px}
 .sf-card[data-net=bnb]{--sf-net:#e0a800}
 .sf-card[data-net=ethereum]{--sf-net:#627eea}
-.sf-card[data-net]{border-left:3px solid var(--sf-net);background:color-mix(in srgb,var(--sf-net) 4%,transparent)}
+.sf-card[data-net]{border-left:2px solid color-mix(in srgb,var(--sf-net) 55%,transparent)}
 .sf-card-net{display:inline-flex;align-items:center;gap:6px}
 .sf-net-dot{width:8px;height:8px;border-radius:50%;background:var(--sf-net,var(--sf-fg3))}
 .sf-more{border-top:1px solid var(--sf-line);padding-top:8px}

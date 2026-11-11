@@ -5,6 +5,7 @@ import { formatDate, formatDateTime, parseTime, rangePosition, relativeTime, tim
 import type { Amount, NetworkState, Position, Session } from './types'
 import { ExtLink, Hex, Num, usePane, Warning } from './ui'
 import { Plays } from './plays-view'
+import { NetworkMark } from './icons'
 
 const STATUS: Record<string, { label: string; tone: StatusTone }> = {
   active: { label: 'Active', tone: 'good' },
@@ -117,7 +118,7 @@ function SessionCard({ network, session }: { network: NetworkState; session: Ses
     <li className="sf-card" data-net={network.key} data-status={session.status}>
       <div className="sf-card-head">
         <span className="sf-card-net">
-          <span className="sf-net-dot" />
+          <NetworkMark network={network.key} />
           {network.name}
         </span>
         <span className="sf-card-status">
@@ -152,6 +153,7 @@ function SessionCard({ network, session }: { network: NetworkState; session: Ses
 
       {holding === false && session.status === 'active' ? <Plays network={network} stage="start" /> : null}
 
+      {network.positions.length > 0 ? <h4 className="sf-section">Positions</h4> : null}
       {network.positions.length > 0 ? (
         <ul className="sf-positions">
           {network.positions.map(position => (

@@ -238,6 +238,20 @@ var AltanaMark = ({ size = 16 }) => /* @__PURE__ */ jsxs("svg", { "aria-hidden":
   /* @__PURE__ */ jsx("path", { d: "M141.421 361.45L56.5686 276.597C25.3266 245.355 25.3266 194.702 56.5686 163.46L141.421 78.6075L282.843 220.029L141.421 361.45Z", fill: "#F2CB45" }),
   /* @__PURE__ */ jsx("path", { d: "M163.617 56.7248C194.858 25.4828 245.512 25.4828 276.754 56.7248L361.96 141.931L220.066 283.825L78.2908 142.051L163.617 56.7248Z", fill: "#3665E4" })
 ] });
+var NetworkMark = ({ network: network2, size = 14 }) => network2 === "bnb" ? /* @__PURE__ */ jsx("svg", { "aria-hidden": "true", focusable: "false", height: size, viewBox: "0 0 126.61 126.61", width: size, children: /* @__PURE__ */ jsx(
+  "path",
+  {
+    d: "M38.73 53.2l24.59-24.58 24.6 24.6 14.3-14.31L63.32 0 24.42 38.9zM0 63.31l14.3-14.31 14.31 14.31-14.31 14.3zM38.73 73.41l24.59 24.59 24.6-24.6 14.31 14.29-38.9 38.91-38.91-38.88zM98 63.31l14.3-14.31 14.31 14.3-14.31 14.32zM77.83 63.3L63.32 48.78 52.59 59.51l-1.24 1.23-2.54 2.54 14.51 14.5 14.51-14.47z",
+    fill: "#F3BA2F"
+  }
+) }) : /* @__PURE__ */ jsxs("svg", { "aria-hidden": "true", focusable: "false", height: size, viewBox: "0 0 256 417", width: Math.round(size * 256 / 417), children: [
+  /* @__PURE__ */ jsx("path", { d: "M127.96 0l-2.8 9.5v275.67l2.8 2.79 127.96-75.64z", fill: "#627EEA", fillOpacity: ".75" }),
+  /* @__PURE__ */ jsx("path", { d: "M127.96 0L0 212.32l127.96 75.64V154.16z", fill: "#627EEA", fillOpacity: ".5" }),
+  /* @__PURE__ */ jsx("path", { d: "M127.96 312.19l-1.57 1.92v98.2l1.57 4.6L256 236.59z", fill: "#627EEA", fillOpacity: ".75" }),
+  /* @__PURE__ */ jsx("path", { d: "M127.96 416.91V312.19L0 236.59z", fill: "#627EEA", fillOpacity: ".5" }),
+  /* @__PURE__ */ jsx("path", { d: "M127.96 287.96l127.96-75.64-127.96-58.16z", fill: "#627EEA" }),
+  /* @__PURE__ */ jsx("path", { d: "M0 212.32l127.96 75.64V154.16z", fill: "#627EEA", fillOpacity: ".8" })
+] });
 
 // src/ui.tsx
 import { CopyButton, Tip } from "@hermes/plugin-sdk";
@@ -1089,7 +1103,7 @@ function Plays({ network: network2, stage }) {
   };
   return /* @__PURE__ */ jsxs5("section", { className: "sf-plays", "data-stage": stage, children: [
     /* @__PURE__ */ jsxs5("div", { className: "sf-plays-head", children: [
-      /* @__PURE__ */ jsx5("span", { className: "sf-strong", children: stage === "start" ? "Next: put the agent to work" : "Ask the agent" }),
+      /* @__PURE__ */ jsx5("h4", { className: "sf-section", children: stage === "start" ? "Next: put the agent to work" : "Ask the agent" }),
       /* @__PURE__ */ jsx5("span", { className: "sf-hint", children: "A button writes the request into the chat box. You send it." })
     ] }),
     /* @__PURE__ */ jsx5("ul", { className: "sf-play-list", children: PLAYS.filter((play) => play.when === "both" || play.when === stage).map((play) => /* @__PURE__ */ jsxs5("li", { className: "sf-play", children: [
@@ -1230,7 +1244,7 @@ function SessionCard({ network: network2, session: session2 }) {
   return /* @__PURE__ */ jsxs6("li", { className: "sf-card", "data-net": network2.key, "data-status": session2.status, children: [
     /* @__PURE__ */ jsxs6("div", { className: "sf-card-head", children: [
       /* @__PURE__ */ jsxs6("span", { className: "sf-card-net", children: [
-        /* @__PURE__ */ jsx6("span", { className: "sf-net-dot" }),
+        /* @__PURE__ */ jsx6(NetworkMark, { network: network2.key }),
         network2.name
       ] }),
       /* @__PURE__ */ jsxs6("span", { className: "sf-card-status", children: [
@@ -1258,6 +1272,7 @@ function SessionCard({ network: network2, session: session2 }) {
       /* @__PURE__ */ jsx6("span", { className: "sf-dim", children: relativeTime(expiry, now) })
     ] }) : null,
     holding === false && session2.status === "active" ? /* @__PURE__ */ jsx6(Plays, { network: network2, stage: "start" }) : null,
+    network2.positions.length > 0 ? /* @__PURE__ */ jsx6("h4", { className: "sf-section", children: "Positions" }) : null,
     network2.positions.length > 0 ? /* @__PURE__ */ jsx6("ul", { className: "sf-positions", children: network2.positions.map((position2) => /* @__PURE__ */ jsx6(PositionBlock, { dex: network2.dex, position: position2 }, position2.tokenId || position2.pair)) }) : null,
     holding && session2.status === "active" ? /* @__PURE__ */ jsx6(Plays, { network: network2, stage: "holding" }) : null,
     session2.scopeText.length > 0 ? /* @__PURE__ */ jsxs6("details", { className: "sf-more", open: session2.status !== "active" || void 0, children: [
@@ -2356,7 +2371,7 @@ function WalletStep({ address }) {
           },
           size: "sm",
           type: "button",
-          children: "Create wallet"
+          children: "Create Smart Agentic Wallet"
         }
       ),
       /* @__PURE__ */ jsx9(
@@ -2636,12 +2651,14 @@ button.sf-step-head:hover .sf-step-caret{color:var(--sf-fg)}
 .sf-live{display:flex;flex-direction:column;gap:10px;padding-top:14px;border-top:1px solid var(--sf-line)}
 .sf-section-title{font-size:13px;font-weight:600}
 .sf-cards{display:flex;flex-direction:column;gap:12px}
-.sf-plays{display:flex;flex-direction:column;gap:6px;margin-top:4px;padding-top:10px;border-top:1px solid var(--sf-line)}
+.sf-section{margin:0;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--sf-fg2)}
+.sf-card > .sf-section{margin-top:6px}
+.sf-plays{display:flex;flex-direction:column;gap:6px;margin-top:6px;padding:10px 12px 4px;border:1px solid var(--sf-line);border-radius:6px;background:var(--sf-wash)}
+.sf-plays[data-stage=start] .sf-section{color:var(--sf-accent);font-size:12px}
 .sf-plays[data-stage=start]{margin-top:2px;padding:10px 12px 4px;border:1px solid color-mix(in srgb,var(--sf-accent) 45%,transparent);border-radius:6px;background:color-mix(in srgb,var(--sf-accent) 7%,transparent)}
-.sf-plays[data-stage=start] .sf-plays-head .sf-strong{font-size:13.5px}
 .sf-card[data-net=bnb]{--sf-net:#e0a800}
 .sf-card[data-net=ethereum]{--sf-net:#627eea}
-.sf-card[data-net]{border-left:3px solid var(--sf-net);background:color-mix(in srgb,var(--sf-net) 4%,transparent)}
+.sf-card[data-net]{border-left:2px solid color-mix(in srgb,var(--sf-net) 55%,transparent)}
 .sf-card-net{display:inline-flex;align-items:center;gap:6px}
 .sf-net-dot{width:8px;height:8px;border-radius:50%;background:var(--sf-net,var(--sf-fg3))}
 .sf-more{border-top:1px solid var(--sf-line);padding-top:8px}
@@ -2933,7 +2950,7 @@ function Steps({ state, draft, onDraft, onWithdraw }) {
   const isOpen = (i) => toggled[i] ?? defaults[i] ?? false;
   const toggle = (i) => () => setToggled((prev) => ({ ...prev, [i]: !(prev[i] ?? defaults[i] ?? false) }));
   return /* @__PURE__ */ jsxs11("ol", { className: "sf-steps", children: [
-    /* @__PURE__ */ jsx11(Step, { n: 1, onToggle: toggle(0), open: isOpen(0), status: statusOf2(0), summary: walletSummary(address), title: "Create wallet", children: /* @__PURE__ */ jsx11(WalletStep, { address }) }),
+    /* @__PURE__ */ jsx11(Step, { n: 1, onToggle: toggle(0), open: isOpen(0), status: statusOf2(0), summary: walletSummary(address), title: "Create Smart Agentic Wallet", children: /* @__PURE__ */ jsx11(WalletStep, { address }) }),
     /* @__PURE__ */ jsx11(
       Step,
       {

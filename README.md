@@ -29,7 +29,7 @@ You need Hermes 0.23.0 or newer, Hermes Desktop, macOS or Linux, and a browser w
 
 The pane has four steps. Nothing is sent to a chain until step 4.
 
-1. **Create wallet.** Your browser opens a page on localhost and creates a passkey. The wallet has one address on both networks.
+1. **Create Smart Agentic Wallet.** Your browser opens a page on localhost and creates a passkey. The wallet has one address on both networks.
 2. **Fund.** Send the native coin to that address from your own wallet: ETH on Ethereum, BNB on BNB Chain.
 3. **Set permissions.** Pick the tokens the agent may use, a daily cap for each, a daily cap for the native coin, and how many days the session lasts. The pane shows the resulting scope in plain English and what activation costs.
 4. **Activate.** One passkey approval per network, three or four on Sepolia. The first activation on a network also deploys the wallet there and registers two keys in the Altana Keystore, at $0.50 each. Later activations register one.

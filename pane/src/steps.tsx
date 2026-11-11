@@ -107,7 +107,7 @@ export function WalletStep({ address }: { address: string | null }) {
           size="sm"
           type="button"
         >
-          Create wallet
+          Create Smart Agentic Wallet
         </Button>
         <Button
           disabled={locked || create.busy}
