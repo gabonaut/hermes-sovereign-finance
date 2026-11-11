@@ -6,6 +6,15 @@ You hold the admin key, and it is a passkey. It stays on your device, and every 
 
 Inside those limits the agent can provide liquidity on PancakeSwap V3 and Uniswap V3 and rebalance it on a Hermes cron job.
 
+## What has been run
+
+| Network | Checked with a real passkey |
+|---|---|
+| BNB Chain | Create the wallet, activate, open a position from chat, a transfer outside the scope refused by the wallet, close, revoke, withdraw. |
+| BNB testnet | The same, plus a rebalance from Hermes cron. |
+| Sepolia | The same, including the cron rebalance. Activation takes more approvals there (see below). |
+| Ethereum | Not verified. The wallet has the same address there, but an activation did not confirm during testing. Start on BNB Chain. |
+
 ## Install
 
 One click from Hermes Desktop:
@@ -32,7 +41,7 @@ The pane has four steps. Nothing is sent to a chain until step 4.
 1. **Create Smart Agentic Wallet.** Your browser opens a page on localhost and creates a passkey. The wallet has one address on both networks.
 2. **Fund.** Send the native coin to that address from your own wallet: ETH on Ethereum, BNB on BNB Chain.
 3. **Set permissions.** Pick the tokens the agent may use, a daily cap for each, a daily cap for the native coin, and how many days the session lasts. The pane shows the resulting scope in plain English and what activation costs.
-4. **Activate.** One passkey approval per network, three or four on Sepolia. The first activation on a network also deploys the wallet there and registers two keys in the Altana Keystore, at $0.50 each. Later activations register one.
+4. **Activate.** One passkey approval per network, three or four on Sepolia. On mainnet, approve within 30 seconds of the passkey button appearing: the relay's fee quote lasts that long, and a late approval sends nothing. The first activation on a network also deploys the wallet there and registers two keys in the Altana Keystore, at $0.50 each. Later activations register one.
 
 After that the pane shows, per network, the session's scope and expiry, open positions, a link to the session key in the Keystore explorer, and Revoke. Withdraw sends funds from the wallet to an address you type. It needs your passkey too.
 
@@ -47,7 +56,7 @@ Sepolia limits how much new storage one transaction can write to the wallet, so 
 | `sovereign_status` | Address, balances, session status, scope and caps. Read-only. |
 | `sovereign_positions` | Positions with range, in-range flag, amounts and unclaimed fees. Read-only. |
 | `sovereign_quote` | The most traded V3 pools with fee APR, swap quotes, and plans that open or close a position. Read-only. |
-| `sovereign_execute` | Sends one batch with the session key. |
+| `sovereign_execute` | Sends one batch with the session key. `open` or `close` builds the whole batch for a position; a `planId` from a quote runs that plan. |
 | `sovereign_skill` | Reads skills from the Altana skills registry after checking their hash. Read-only. |
 
 There is no tool for creating a wallet, changing permissions, activating, revoking or withdrawing. Those exist only in the pane, and each needs your passkey.
@@ -71,6 +80,10 @@ The bundled skill `sovereign-finance:v3-range` teaches the agent the plays: list
 - Hermes YOLO mode, `approvals.mode: off` and `approvals.cron_mode: approve` skip the approval prompt. The onchain limits still apply.
 - If you lose every copy of the passkey, nobody can revoke or withdraw. The session still ends on its expiry date.
 - The wallet's networks are fixed when it is created.
+- Revoke removes the agent's key and nothing else. An open position stays in the wallet. To exit, have the agent close it first, then withdraw, then revoke.
+- Every transaction goes through the Altana relay, including a withdrawal signed by your passkey. Funds on a network wait for the relay to deliver there.
+- The passkey page is on localhost, and the passkey is bound to that name. Approve only a prompt you started from the pane.
+- Hermes loads plugin tools on demand. A capable model finds them from a plain request; a small one may need the tool named, as in "use sovereign_execute".
 
 ## Run it
 
