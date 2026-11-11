@@ -20723,6 +20723,15 @@ function privateKeyToAccount(privateKey, options = {}) {
   };
 }
 
+// node_modules/viem/_esm/accounts/utils/privateKeyToAddress.js
+init_secp256k1();
+init_toHex();
+init_publicKeyToAddress();
+function privateKeyToAddress(privateKey) {
+  const publicKey = bytesToHex(secp256k1.getPublicKey(privateKey.slice(2), false));
+  return publicKeyToAddress(publicKey);
+}
+
 // node_modules/viem/_esm/chains/definitions/bsc.js
 init_defineChain();
 var bsc = /* @__PURE__ */ defineChain({
@@ -47177,6 +47186,19 @@ async function relayGasBuffer(chain) {
     return fallback;
   }
 }
+async function grantedPairs(chain, wallet, sessionAddress) {
+  const res = await fetch(chain.relayUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "wallet_getKeys", params: [{ address: wallet, chainIds: [`0x${chain.chainId.toString(16)}`] }] }),
+    signal: AbortSignal.timeout(15e3)
+  });
+  const body = await res.json();
+  const keys = body?.result?.[`0x${chain.chainId.toString(16)}`] ?? [];
+  const key = keys.find((k) => String(k.publicKey).toLowerCase().endsWith(sessionAddress.slice(2).toLowerCase()));
+  if (!key) return null;
+  return new Set((key.permissions ?? []).filter((p) => p.type === "call").map((p) => `${String(p.to).toLowerCase()}:${String(p.selector).toLowerCase()}`));
+}
 
 // src/policy.ts
 var MAX_LIMIT = 10n ** 24n;
@@ -47350,6 +47372,7 @@ function webAuthnFns(transport, prompt) {
 
 // src/admin.ts
 var DRAFT_MAX_AGE_MS = 24 * 3600 * 1e3;
+var PENDING_WAIT_MS = 12 * 60 * 1e3;
 function requireWallet(ctx) {
   const w = ctx.store.wallet(ctx.mode);
   if (!w) throw new CliError("NO_WALLET", `No ${ctx.mode} wallet yet. Create one first.`);
@@ -47588,6 +47611,19 @@ async function activate(ctx, input2) {
           ctx.job.step(many ? `Activating on ${chain.name}, step ${i + 1} of ${stages.length}` : `Activating on ${chain.name}`);
           say(`Activate the agent's session on ${chain.name}. ${policy.scopeText.slice(4, 6).join(" ")} ${policy.scopeText.at(-1)}${many ? ` Approval ${i + 1} of ${stages.length} on this network.` : ""}`);
           try {
+            const sessionAddress = privateKeyToAddress(secret);
+            const keyId = record2.keyId;
+            const landed = async () => {
+              if (stage.register) return isValidKey(chain, wallet.address, keyId).catch(() => false);
+              const have = await grantedPairs(chain, wallet.address, sessionAddress).catch(() => null);
+              return have !== null && stage.calls.every((c) => have.has(pair(c.to, c.signature)));
+            };
+            if (await landed()) {
+              ctx.log(`activate ${chain.name}: step ${i + 1} is already onchain`);
+              record2 = { ...record2, stagesDone: i + 1, grantTxs: hashes };
+              ctx.store.saveSession(chain.chainId, record2);
+              continue;
+            }
             const grant = () => client.grantSession({
               wallet: { address: wallet.address },
               signer,
@@ -47601,14 +47637,28 @@ async function activate(ctx, input2) {
             try {
               granted = await grant();
             } catch (e) {
-              if (decodeFailure(e).code !== "QUOTE_EXPIRED") throw e;
-              ctx.log(`activate ${chain.name}: the quote ran out, asking again`);
-              say(`The fee quote ran out before your approval arrived, so nothing was sent. Approve again for ${chain.name}.`);
-              granted = await grant();
+              if (/status=PENDING/.test(String(e?.message ?? e))) {
+                ctx.job.step(`Waiting for ${chain.name} to confirm. The transaction is submitted, and this can take several minutes`);
+                const until = Date.now() + PENDING_WAIT_MS;
+                let seen = false;
+                while (!seen && Date.now() < until) {
+                  await new Promise((r) => setTimeout(r, 8e3));
+                  seen = await landed();
+                }
+                if (!seen) {
+                  throw new CliError("STILL_PENDING", `The transaction was submitted, but ${chain.name} has not confirmed it yet. Nothing was charged so far. Activate again in a few minutes: the plugin checks the chain first and does not ask you to sign twice for a transaction that went through.`);
+                }
+                granted = { transactionHash: void 0 };
+              } else {
+                if (decodeFailure(e).code !== "QUOTE_EXPIRED") throw e;
+                ctx.log(`activate ${chain.name}: the quote ran out, asking again`);
+                say(`The fee quote ran out before your approval arrived, so nothing was sent. Approve again for ${chain.name}.`);
+                granted = await grant();
+              }
             }
             if (granted.transactionHash) hashes.push(granted.transactionHash);
           } catch (e) {
-            if (!many) throw e;
+            if (!many || e instanceof CliError && e.code === "STILL_PENDING") throw e;
             const f = decodeFailure(e);
             ctx.log(`activate ${chain.name} step ${i + 1} failed: ${f.raw}`);
             const why = f.code === "RELAY_REJECTED" ? relayDropped(chain.relayNote) : f.message;

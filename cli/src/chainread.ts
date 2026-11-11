@@ -59,3 +59,21 @@ export async function relayGasBuffer(chain: Chain): Promise<bigint> {
     return fallback;
   }
 }
+
+/**
+ * The call permissions the relay reports for one session key on a wallet, as lowercase
+ * "address:selector" pairs, or null when the wallet does not hold that key.
+ */
+export async function grantedPairs(chain: Chain, wallet: Address, sessionAddress: Address): Promise<Set<string> | null> {
+  const res = await fetch(chain.relayUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "wallet_getKeys", params: [{ address: wallet, chainIds: [`0x${chain.chainId.toString(16)}`] }] }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const body: any = await res.json();
+  const keys: any[] = body?.result?.[`0x${chain.chainId.toString(16)}`] ?? [];
+  const key = keys.find((k) => String(k.publicKey).toLowerCase().endsWith(sessionAddress.slice(2).toLowerCase()));
+  if (!key) return null;
+  return new Set((key.permissions ?? []).filter((p: any) => p.type === "call").map((p: any) => `${String(p.to).toLowerCase()}:${String(p.selector).toLowerCase()}`));
+}
